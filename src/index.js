@@ -38,7 +38,6 @@ const sseClients = [];
 
 app.get("/events", (req, res) => {
   res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
-  res.write("data: {\"connected\":false}\n\n");
   sseClients.push(res);
   req.on("close", () => { const i = sseClients.indexOf(res); if(i>=0) sseClients.splice(i,1); });
 });
@@ -147,5 +146,5 @@ loadHistory();
 app.listen(PORT, () => {
   console.log("Bot server on http://localhost:" + PORT);
   keepAlive();
-  startBridge(ADMIN_JID, aiDisabledPhones, aiMode, stats).catch(console.error);
+  startBridge(ADMIN_JID, aiDisabledPhones, aiMode, stats, broadcast).catch(console.error);
 });

@@ -93,10 +93,10 @@ td{padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
   </form>
 </div>
 
-${!connected && getLatestQr() ? `<div class="card" style="text-align:center">
+${!connected ? `<div class="card" style="text-align:center" id="qrCard">
   <h2>📱 امسح QR</h2>
   <p style="font-size:12px;color:#8696a0;margin-bottom:8px">افتح واتساب ← الأجهزة المرتبطة ← امسح</p>
-  <img src="/admin/qr.png" class="qr-img" alt="QR">
+  <div id="qrWrap">${getLatestQr() ? `<img src="/admin/qr.png" class="qr-img" alt="QR">` : `<p style="color:#888;font-size:13px" id="qrWait">جاري التوليد...</p>`}</div>
 </div>` : ""}
 
 <div class="card">
@@ -107,20 +107,6 @@ ${!connected && getLatestQr() ? `<div class="card" style="text-align:center">
 <div class="card">
   <h2>📋 جهات الاتصال</h2>
   <div id="contactsList" style="font-size:13px">جاري التحميل...</div>
-  <script>
-  fetch("/api/contacts").then(r=>r.json()).then(list=>{
-    document.getElementById("contactsList").innerHTML =
-      '<table>' + list.map(c =>
-        '<tr><td style="padding:4px 0">' + c.name + '</td>' +
-        '<td style="padding:4px 0;direction:ltr;text-align:right">' + c.phone + '</td>' +
-        '<td style="padding:4px 0"><a href="#" onclick="toggleContact(\'' + c.phone + '\');return false" style="color:' + (c.status==='active'?'#4caf50':'#e94560') + ';text-decoration:none">' + (c.status==='active'?'✅':'🔇') + '</a></td></tr>'
-      ).join('') + '</table>';
-  }).catch(()=>{document.getElementById("contactsList").innerHTML='<span style="color:#888">فارغ</span>'});
-  function toggleContact(phone) {
-    fetch("/api/toggle-status", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
-    .then(r=>r.json()).then(d=>{location.reload()}).catch(()=>{});
-  }
-  </script>
 </div>
 
 <div class="card">
@@ -137,6 +123,18 @@ ${!connected && getLatestQr() ? `<div class="card" style="text-align:center">
 
 <div class="footer"><a href="/admin">تحديث الصفحة</a></div>
 <script>
+var evtSource = new EventSource("/events");
+evtSource.addEventListener("message", function(e) {
+  try {
+    var d = JSON.parse(e.data);
+    if (d && d.from) beep();
+  } catch(x) {}
+});
+evtSource.addEventListener("connected", function(e) {
+  if (document.getElementById("qrWait") && e.data) {
+    document.getElementById("qrWait").outerHTML = '<img src="/admin/qr.png?' + Date.now() + '" class="qr-img" alt="QR">';
+  }
+});
 let soundOn = true;
 try { soundOn = localStorage.getItem("notif_sound") !== "off"; } catch(e) {}
 function beep() {
@@ -158,11 +156,19 @@ function toggleSound() {
   try { localStorage.setItem("notif_sound", soundOn ? "on" : "off"); } catch(e) {}
   document.getElementById("soundBtn").textContent = soundOn ? "🔔" : "🔇";
 }
-var evtSource = new EventSource("/events");
-evtSource.addEventListener("message", function(e) {
-  beep();
-  location.reload();
-});
+fetch("/api/contacts").then(r=>r.json()).then(list=>{
+  document.getElementById("contactsList").innerHTML = list.length === 0
+    ? '<span style="color:#888;font-size:13px">لا توجد جهات اتصال بعد. سيتم إضافة المرسلين تلقائياً.</span>'
+    : '<table>' + list.map(c =>
+      '<tr><td style="padding:4px 0">' + c.name + '</td>' +
+      '<td style="padding:4px 0;direction:ltr;text-align:right">' + c.phone + '</td>' +
+      '<td style="padding:4px 0"><a href="#" onclick="toggleContact(\'' + c.phone + '\');return false" style="color:' + (c.status==='active'?'#4caf50':'#e94560') + ';text-decoration:none">' + (c.status==='active'?'✅':'🔇') + '</a></td></tr>'
+    ).join('') + '</table>';
+}).catch(()=>{document.getElementById("contactsList").innerHTML='<span style="color:#888">فارغ</span>'});
+function toggleContact(phone) {
+  fetch("/api/toggle-status", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
+  .then(r=>r.json()).then(function(d){location.reload()}).catch(function(){});
+}
 </script>
 </body>
 </html>`);

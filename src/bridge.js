@@ -49,7 +49,7 @@ let wsConnected = false;
 let latestQr = null;
 let restartTimer = null;
 
-async function startBridge(adminJid, aiDisabledPhones, aiMode, stats) {
+async function startBridge(adminJid, aiDisabledPhones, aiMode, stats, broadcast) {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
   sock = makeWASocket({
@@ -65,6 +65,7 @@ async function startBridge(adminJid, aiDisabledPhones, aiMode, stats) {
     if (qr) {
       latestQr = qr;
       qrcode.generate(qr, { small: true });
+      if (broadcast) broadcast("connected", { qr: true });
     }
     if (connection === "open") {
       wsConnected = true;
