@@ -108,6 +108,7 @@ ${!connected && getLatestQr() ? `<div class="card" style="text-align:center">
   <h2>ℹ️ معلومات</h2>
   <p style="font-size:12px;color:#8696a0">آخر خطأ: ${stats.lastError || "لا يوجد"}</p>
   <p style="font-size:12px;color:#8696a0">آخر فرع: ${stats.lastBranch || "-"}</p>
+  <p style="margin-top:8px"><button id="soundBtn" onclick="toggleSound()" style="background:none;border:1px solid #555;color:#eee;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:14px">🔔</button> صوت الإشعارات</p>
 </div>
 
 <div class="fab">
@@ -116,6 +117,44 @@ ${!connected && getLatestQr() ? `<div class="card" style="text-align:center">
 </div>
 
 <div class="footer"><a href="/admin">تحديث الصفحة</a></div>
+<script>
+let lastCount = ${stats.msgCount};
+let soundOn = true;
+try { soundOn = localStorage.getItem("notif_sound") !== "off"; } catch(e) {}
+function beep() {
+  if (!soundOn) return;
+  try {
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.value = 800; o.type = "sine";
+    g.gain.setValueAtTime(0.3, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    o.start(ctx.currentTime); o.stop(ctx.currentTime + 0.3);
+    setTimeout(() => {
+      const o2 = ctx.createOscillator();
+      const g2 = ctx.createGain();
+      o2.connect(g2); g2.connect(ctx.destination);
+      o2.frequency.value = 1000; o2.type = "sine";
+      g2.gain.setValueAtTime(0.3, ctx.currentTime);
+      g2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      o2.start(ctx.currentTime); o2.stop(ctx.currentTime + 0.3);
+    }, 150);
+  } catch(e) {}
+}
+function toggleSound() {
+  soundOn = !soundOn;
+  try { localStorage.setItem("notif_sound", soundOn ? "on" : "off"); } catch(e) {}
+  document.getElementById("soundBtn").textContent = soundOn ? "🔔" : "🔇";
+}
+setInterval(() => {
+  fetch("/status").then(r=>r.json()).then(d=>{
+    if (d.msgCount > lastCount) { beep(); location.reload(); }
+    if (d.connected !== (document.querySelector(".status-dot")?.className?.includes("dot-on")||false)) location.reload();
+  }).catch(()=>{});
+}, 3000);
+</script>
 </body>
 </html>`);
   });
