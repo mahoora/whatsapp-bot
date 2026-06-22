@@ -78,6 +78,7 @@ async function handleMessage(sock, msg, adminJid, aiDisabledPhones, aiMode, stat
 
   stats.msgCount++;
   stats.lastFrom = jid;
+  if (onMessage) onMessage({ from: jid, name: sender });
 
   if (!conversationHistory.has(jid)) conversationHistory.set(jid, []);
   const history = conversationHistory.get(jid);
@@ -251,4 +252,7 @@ async function handleMessage(sock, msg, adminJid, aiDisabledPhones, aiMode, stat
   }
 }
 
-module.exports = { handleMessage, conversationHistory, loadHistory, saveHistory };
+let onMessage = null;
+function setOnMessage(fn) { onMessage = fn; }
+
+module.exports = { handleMessage, conversationHistory, loadHistory, saveHistory, setOnMessage };

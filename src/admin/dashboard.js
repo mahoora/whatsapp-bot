@@ -118,29 +118,20 @@ ${!connected && getLatestQr() ? `<div class="card" style="text-align:center">
 
 <div class="footer"><a href="/admin">تحديث الصفحة</a></div>
 <script>
-let lastCount = ${stats.msgCount};
 let soundOn = true;
 try { soundOn = localStorage.getItem("notif_sound") !== "off"; } catch(e) {}
 function beep() {
   if (!soundOn) return;
   try {
     const ctx = new (window.AudioContext||window.webkitAudioContext)();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.connect(g); g.connect(ctx.destination);
-    o.frequency.value = 800; o.type = "sine";
-    g.gain.setValueAtTime(0.3, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-    o.start(ctx.currentTime); o.stop(ctx.currentTime + 0.3);
-    setTimeout(() => {
-      const o2 = ctx.createOscillator();
-      const g2 = ctx.createGain();
-      o2.connect(g2); g2.connect(ctx.destination);
-      o2.frequency.value = 1000; o2.type = "sine";
-      g2.gain.setValueAtTime(0.3, ctx.currentTime);
-      g2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-      o2.start(ctx.currentTime); o2.stop(ctx.currentTime + 0.3);
-    }, 150);
+    for(let f of [800,1000]) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = f; o.type = "sine";
+      g.gain.setValueAtTime(0.25, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+      o.start(ctx.currentTime + (f===800?0:0.15)); o.stop(ctx.currentTime + (f===800?0.25:0.4));
+    }
   } catch(e) {}
 }
 function toggleSound() {
@@ -148,12 +139,11 @@ function toggleSound() {
   try { localStorage.setItem("notif_sound", soundOn ? "on" : "off"); } catch(e) {}
   document.getElementById("soundBtn").textContent = soundOn ? "🔔" : "🔇";
 }
-setInterval(() => {
-  fetch("/status").then(r=>r.json()).then(d=>{
-    if (d.msgCount > lastCount) { beep(); location.reload(); }
-    if (d.connected !== (document.querySelector(".status-dot")?.className?.includes("dot-on")||false)) location.reload();
-  }).catch(()=>{});
-}, 3000);
+var evtSource = new EventSource("/events");
+evtSource.addEventListener("message", function(e) {
+  beep();
+  location.reload();
+});
 </script>
 </body>
 </html>`);

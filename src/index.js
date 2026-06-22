@@ -33,6 +33,15 @@ app.use(express.json());
 
 app.use("/", createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, aiMode, stats, ADMIN_JID));
 
+const sseClients = [];
+
+app.get("/events", (req, res) => {
+  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+  res.write("data: {\"connected\":false}\n\n");
+  sseClients.push(res);
+  req.on("close", () => { const i = sseClients.indexOf(res); if(i>=0) sseClients.splice(i,1); });
+});
+
 app.get("/status", (req, res) => {
   res.json({
     connected: isConnected(),
@@ -99,12 +108,20 @@ app.get("/diag", (req, res) => {
   });
 });
 
+function broadcast(event, data) {
+  const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const c of sseClients) try { c.write(msg); } catch(e) { const i = sseClients.indexOf(c); if(i>=0) sseClients.splice(i,1); }
+}
+
 app.get("/history", (req, res) => {
   const { conversationHistory } = require("./message-handler");
   const obj = {};
   for (const [key, val] of conversationHistory) obj[key] = val.slice(-10);
   res.json(obj);
 });
+
+const { setOnMessage } = require("./message-handler");
+setOnMessage((data) => broadcast("message", data));
 
 loadHistory();
 
