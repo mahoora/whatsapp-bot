@@ -1,0 +1,8 @@
+node_modules/
+auth_info/
+.env
+*.log
+conversation-history.json
+orders.json
+ai-disabled.json
+family-contacts.json

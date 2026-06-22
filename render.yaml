@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: maher-fire-safety-bot
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /status
+    envVars:
+      - key: NODE_VERSION
+        value: 18
+      - key: AUTH_DIR
+        value: ./auth_info
+      - key: ADMIN_JID
+        value: 966595510125@s.whatsapp.net
+      - key: PORT
+        value: 3000
+      - key: RENDER_URL
+        value: https://maher-fire-safety-bot.onrender.com
