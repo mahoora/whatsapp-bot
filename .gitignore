@@ -6,3 +6,5 @@ conversation-history.json
 orders.json
 ai-disabled.json
 family-contacts.json
+package-lock.json
+data/
