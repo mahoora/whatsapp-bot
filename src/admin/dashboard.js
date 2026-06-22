@@ -105,6 +105,25 @@ ${!connected && getLatestQr() ? `<div class="card" style="text-align:center">
 </div>
 
 <div class="card">
+  <h2>📋 جهات الاتصال</h2>
+  <div id="contactsList" style="font-size:13px">جاري التحميل...</div>
+  <script>
+  fetch("/api/contacts").then(r=>r.json()).then(list=>{
+    document.getElementById("contactsList").innerHTML =
+      '<table>' + list.map(c =>
+        '<tr><td style="padding:4px 0">' + c.name + '</td>' +
+        '<td style="padding:4px 0;direction:ltr;text-align:right">' + c.phone + '</td>' +
+        '<td style="padding:4px 0"><a href="#" onclick="toggleContact(\'' + c.phone + '\');return false" style="color:' + (c.status==='active'?'#4caf50':'#e94560') + ';text-decoration:none">' + (c.status==='active'?'✅':'🔇') + '</a></td></tr>'
+      ).join('') + '</table>';
+  }).catch(()=>{document.getElementById("contactsList").innerHTML='<span style="color:#888">فارغ</span>'});
+  function toggleContact(phone) {
+    fetch("/api/toggle-status", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
+    .then(r=>r.json()).then(d=>{location.reload()}).catch(()=>{});
+  }
+  </script>
+</div>
+
+<div class="card">
   <h2>ℹ️ معلومات</h2>
   <p style="font-size:12px;color:#8696a0">آخر خطأ: ${stats.lastError || "لا يوجد"}</p>
   <p style="font-size:12px;color:#8696a0">آخر فرع: ${stats.lastBranch || "-"}</p>

@@ -7,6 +7,7 @@ const { startBridge, getSock, isConnected, getLatestQr } = require("./bridge");
 const { createDashboard } = require("./admin/dashboard");
 const { loadHistory, saveHistory } = require("./message-handler");
 const ordersDb = require("./orders-db");
+const contactsDb = require("./contacts-db");
 
 const PORT = process.env.PORT || 3000;
 const ADMIN_JID = process.env.ADMIN_JID || "966595510125@s.whatsapp.net";
@@ -92,6 +93,24 @@ app.patch("/orders/:id/status", (req, res) => {
   const order = ordersDb.setOrderStatus(Number(req.params.id), status);
   if (!order) return res.status(404).json({ error: "Order not found" });
   res.json(order);
+});
+
+app.get("/api/contacts", (req, res) => {
+  res.json(contactsDb.getContacts());
+});
+
+app.post("/api/toggle-status", (req, res) => {
+  const { phone } = req.body;
+  if (!phone) return res.status(400).json({ error: "Missing phone" });
+  const status = contactsDb.toggleStatus(phone);
+  if (status) {
+    contactsDb.refresh();
+    res.json({ phone, status });
+  } else {
+    const upserted = contactsDb.upsertContact("Unknown", phone, "inactive");
+    contactsDb.refresh();
+    res.json({ phone, status: "inactive" });
+  }
 });
 
 app.get("/diag", (req, res) => {

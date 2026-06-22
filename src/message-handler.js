@@ -1,6 +1,7 @@
 const { CATEGORY_KEYWORDS, CATEGORY_RESPONSES, RENTAL_LIST_TEXT, BUSINESS_INFO } = require("./config/catalog");
 const { getFamilyContext, getFamilyByPhone } = require("./config/family");
 const { getAIResponse } = require("./ai-router");
+const { isAllowedToReply } = require("./contacts-db");
 const { simulateTyping } = require("./humanizer");
 const { checkForEmergency, handleEmergency } = require("./alert-system");
 const { processImage } = require("./media/vision");
@@ -75,6 +76,7 @@ async function handleMessage(sock, msg, adminJid, aiDisabledPhones, aiMode, stat
   const senderPhone = jid.split("@")[0].replace(/[^0-9]/g, "");
 
   if (aiDisabledPhones.some(p => senderPhone.includes(p) || jid.includes(p))) return;
+  if (!isAllowedToReply(senderPhone)) return;
 
   stats.msgCount++;
   stats.lastFrom = jid;
