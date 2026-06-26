@@ -178,27 +178,26 @@ if (typeof Notification !== "undefined" && Notification.permission === "default"
   });
 })();
 
-// Sound system
+// Sound system - create AudioContext immediately (suspended until user click)
 let audioCtx = null;
-function initAudio() {
-  try {
-    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-    if (audioCtx.state === "suspended") audioCtx.resume();
-  } catch(e) {}
-}
-document.addEventListener("click", initAudio, { once: true });
+try { audioCtx = new (window.AudioContext||window.webkitAudioContext)(); } catch(e) {}
+document.addEventListener("click", function(){
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+}, { once: true });
 
 function beep() {
   if (!soundOn) return;
   try {
-    if (!audioCtx || audioCtx.state === "closed") initAudio();
-    if (!audioCtx || audioCtx.state !== "running") return;
+    if (!audioCtx || audioCtx.state === "closed") {
+      audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    }
+    if (audioCtx.state === "suspended") audioCtx.resume();
     const ctx = audioCtx;
     const now = ctx.currentTime;
     const tones = [
-      {f:660, t:0, d:0.12},
-      {f:880, t:0.14, d:0.12},
-      {f:1100, t:0.28, d:0.18},
+      {f:660, t:0.05, d:0.12},
+      {f:880, t:0.19, d:0.12},
+      {f:1100, t:0.33, d:0.18},
     ];
     for (const t of tones) {
       const o = ctx.createOscillator();
@@ -312,7 +311,19 @@ function toggleContact(phone) {
   fetch("/api/toggle-status", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:phone})})
   .then(function(r){return r.json()}).then(function(){
     return fetch("/api/contacts").then(function(r){return r.json()});
-  }).then(renderContacts).catch(function(){});
+  }).then(function(list){
+    var el = document.getElementById("contactsList");
+    if (!el) return;
+    el.innerHTML = list.length === 0
+      ? '<span style="color:#888;font-size:13px">لا توجد جهات اتصال بعد</span>'
+      : '<table>' + list.map(function(c) {
+          var a = c.status === "active";
+          return '<tr><td style="padding:4px 0">' + (c.name||'').replace(/[<>&"]/g,'') +
+            '</td><td style="padding:4px 0;direction:ltr;text-align:right">' + c.phone +
+            '</td><td style="padding:4px 0"><button onclick="toggleContact(\'' + c.phone + '\')" style="background:none;border:none;cursor:pointer;font-size:18px;color:' + (a ? '#4caf50' : '#e94560') + '">' + (a ? '✅' : '🔇') + '</button></td></tr>';
+        }).join('') + '</table>';
+    if (btn) btn.disabled = false;
+  }).catch(function(){ if(btn) btn.disabled = false; });
 }
 </script>
 </body>
