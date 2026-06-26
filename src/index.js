@@ -121,7 +121,11 @@ const { FAMILY } = require("./config/family");
 
 function loadFamilyContacts() {
   try { return JSON.parse(fs.readFileSync("./family-contacts.json")); }
-  catch (e) { return FAMILY.map(f => ({ phone: f.phone, name: f.name, relationship: f.relationship })); }
+  catch (e) {
+    const defaults = FAMILY.map(f => ({ phone: f.phone, name: f.name, relationship: f.relationship }));
+    try { fs.writeFileSync("./family-contacts.json", JSON.stringify(defaults, null, 2)); } catch(e2) {}
+    return defaults;
+  }
 }
 
 app.get("/api/contacts", (req, res) => {
