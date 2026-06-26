@@ -7,7 +7,7 @@ services:
     healthCheckPath: /status
     envVars:
       - key: NODE_VERSION
-        value: 18
+        value: 20
       - key: AUTH_DIR
         value: ./auth_info
       - key: ADMIN_JID

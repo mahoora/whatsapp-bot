@@ -6,6 +6,7 @@ const {
   makeWASocket,
   useMultiFileAuthState,
   DisconnectReason,
+  fetchLatestBaileysVersion,
 } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const qrcode = require("qrcode-terminal");
@@ -50,9 +51,11 @@ async function startBridge(adminJid, aiDisabledPhones, aiMode, stats, broadcast)
   console.log(`Bridge attempt #${attempt}...`);
   try {
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
-    console.log(`Bridge #${attempt}: auth state loaded`);
+    const { version, isLatest } = await fetchLatestBaileysVersion();
+    console.log(`Bridge #${attempt}: using WA version ${version.join(".")} (latest: ${isLatest})`);
 
     sock = makeWASocket({
+      version,
       printQRInTerminal: true,
       auth: state,
       logger,
