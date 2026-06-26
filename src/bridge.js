@@ -1,3 +1,7 @@
+if (typeof globalThis.crypto === "undefined" || !globalThis.crypto?.getRandomValues) {
+  try { globalThis.crypto = require("crypto").webcrypto; } catch (e) { console.error("crypto polyfill failed:", e.message); }
+}
+
 const {
   makeWASocket,
   useMultiFileAuthState,
