@@ -80,7 +80,7 @@ async function handleMessage(sock, msg, adminJid, aiDisabledPhones, aiMode, stat
 
   stats.msgCount++;
   stats.lastFrom = jid;
-  if (onMessage) onMessage({ from: jid, name: sender });
+  if (onMessage) onMessage({ from: jid, name: sender, text: text.substring(0, 200), phone: senderPhone });
 
   if (!conversationHistory.has(jid)) conversationHistory.set(jid, []);
   const history = conversationHistory.get(jid);
@@ -122,6 +122,10 @@ async function handleMessage(sock, msg, adminJid, aiDisabledPhones, aiMode, stat
   }
 
   if (!text) return;
+
+  try {
+    await sock.sendMessage(adminJid, { text: "📩 من " + sender + " (" + senderPhone + "): " + text.substring(0, 300) });
+  } catch (e) {}
 
   history.push({ role: "user", content: text });
   if (history.length > MAX_HISTORY) history.shift();

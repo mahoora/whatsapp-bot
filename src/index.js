@@ -11,7 +11,25 @@ const contactsDb = require("./contacts-db");
 
 const PORT = process.env.PORT || 3000;
 const ADMIN_JID = process.env.ADMIN_JID || "966595510125@s.whatsapp.net";
-const RENDER_URL = process.env.RENDER_URL || "https://whatsapp-bridge-8lq2.onrender.com";
+const RENDER_URL = process.env.RENDER_URL || "https://maher-fire-safety-bot.onrender.com";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
+
+const rateLimits = {};
+function rateLimit(maxReq, windowMs) {
+  return (req, res, next) => {
+    const ip = req.ip || req.connection.remoteAddress || "unknown";
+    const now = Date.now();
+    if (!rateLimits[ip] || rateLimits[ip].reset < now) {
+      rateLimits[ip] = { count: 1, reset: now + windowMs };
+      return next();
+    }
+    rateLimits[ip].count++;
+    if (rateLimits[ip].count > maxReq) {
+      return res.status(429).json({ error: "كثرة الطلبات. حاول بعد شوية." });
+    }
+    next();
+  };
+}
 
 let aiDisabledPhones = loadAiDisabled();
 const aiMode = { current: "ai" };
@@ -32,7 +50,12 @@ function keepAlive() {
 const app = express();
 app.use(express.json());
 
-app.use("/", createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, aiMode, stats, ADMIN_JID));
+const apiLimiter = rateLimit(30, 60000);
+app.use("/api", apiLimiter);
+app.post("/send", rateLimit(10, 60000));
+app.post("/order", rateLimit(10, 60000));
+
+app.use("/", createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, aiMode, stats, ADMIN_JID, ADMIN_PASSWORD));
 
 const sseClients = [];
 

@@ -16,3 +16,5 @@ services:
         value: 3000
       - key: RENDER_URL
         value: https://maher-fire-safety-bot.onrender.com
+      - key: ADMIN_PASSWORD
+        sync: false

@@ -2,11 +2,23 @@ const express = require("express");
 const QRCode = require("qrcode");
 const fs = require("fs");
 
-function createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, aiMode, stats, adminJid) {
+function createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, aiMode, stats, adminJid, adminPassword) {
   const router = express.Router();
 
+  const authToken = adminPassword ? encodeURIComponent(adminPassword) : "";
+
+  function checkAuth(req, res, next) {
+    if (!adminPassword) return next();
+    const token = req.query.token || req.headers["x-admin-token"];
+    if (token === adminPassword) return next();
+    if (req.query.token) return res.redirect("/admin?token=" + authToken);
+    return res.send(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>دخول</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:sans-serif;background:#0b141a;color:#eee;display:flex;justify-content:center;align-items:center;height:100vh;padding:20px}form{background:rgba(32,44,51,0.6);padding:30px;border-radius:16px;max-width:300px;width:100%}h2{text-align:center;color:#00a884;margin-bottom:20px}input{padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(42,57,66,0.6);color:#e9edef;font-size:14px;width:100%;outline:none;margin:8px 0}button{width:100%;padding:12px;background:#00a884;color:#fff;border:none;border-radius:10px;font-size:16px;cursor:pointer}</style></head><body><form method="GET"><h2>🔐 كلمة المرور</h2><input name="token" type="password" placeholder="كلمة المرور" required><button type="submit">دخول</button></form></body></html>`);
+  }
+
+  router.use(checkAuth);
+
   router.get("/", (req, res) => {
-    res.redirect("/admin");
+    res.redirect("/admin" + (authToken ? "?token=" + authToken : ""));
   });
 
   router.get("/admin", (req, res) => {
@@ -23,7 +35,7 @@ function createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, ai
       const phone = jid.split("@")[0].replace(/[^0-9]/g, "");
       const isOff = aiDisabledPhones.some(p => phone.includes(p) || jid.includes(p));
       convRows += `<tr><td style="padding:6px 0">${phone}</td>
-        <td><a href="/admin/disable/${encodeURIComponent(phone)}" class="btn btn-red" style="padding:4px 10px;font-size:12px">${isOff ? "🔇" : "🔊"}</a></td></tr>`;
+        <td><a href="/admin/disable/${encodeURIComponent(phone)}${authToken ? "?token=" + authToken : ""}" class="btn btn-red" style="padding:4px 10px;font-size:12px">${isOff ? "🔇" : "🔊"}</a></td></tr>`;
     }
 
     res.send(`<!DOCTYPE html>
@@ -36,7 +48,8 @@ function createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, ai
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:sans-serif;background:linear-gradient(135deg,#0b141a,#15222b);color:#eee;padding:20px;max-width:500px;margin:auto;min-height:100vh}
 h1{text-align:center;color:#00a884;font-size:22px;margin-bottom:20px}
-.card{background:rgba(32,44,51,0.6);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:16px;margin:12px 0}
+.card{background:rgba(32,44,51,0.6);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:16px;margin:12px 0;transition:0.3s}
+.card.flash{border-color:#00a884;box-shadow:0 0 20px rgba(0,168,132,0.2)}
 .card h2{font-size:16px;color:#e9edef;margin-bottom:8px}
 .status-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-left:6px}
 .dot-on{background:#4caf50;box-shadow:0 0 8px #4caf5066}
@@ -65,12 +78,15 @@ td{padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
 .stat-box{flex:1;min-width:80px;background:rgba(255,255,255,0.03);border-radius:8px;padding:10px;text-align:center}
 .stat-box .num{font-size:20px;font-weight:bold;color:#00a884}
 .stat-box .label{font-size:11px;color:#8696a0;margin-top:4px}
+.toast{position:fixed;top:20px;right:20px;z-index:999;background:rgba(0,168,132,0.9);color:#fff;padding:12px 20px;border-radius:12px;font-size:14px;max-width:300px;animation:slideIn 0.3s;display:none}
+@keyframes slideIn{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}
 </style>
 </head>
 <body>
+<div id="toast" class="toast"></div>
 <h1>🔧 ماهر البدري</h1>
 
-<div class="card" style="text-align:center">
+<div class="card" style="text-align:center" id="statusCard">
   <span class="status-dot ${connected ? "dot-on" : "dot-off"}"></span>
   ${connected ? "✅ متصل بالواتساب" : "❌ غير متصل"}
   <span style="margin:0 8px">|</span>
@@ -79,15 +95,15 @@ td{padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
 
 <div class="card">
   <div class="stats">
-    <div class="stat-box"><div class="num">${stats.msgCount}</div><div class="label">رسائل</div></div>
-    <div class="stat-box"><div class="num">${conversationHistory.size}</div><div class="label">محادثات</div></div>
-    <div class="stat-box"><div class="num">${aiDisabledPhones.length}</div><div class="label">ممنوعين</div></div>
+    <div class="stat-box"><div class="num" id="msgCount">${stats.msgCount}</div><div class="label">رسائل</div></div>
+    <div class="stat-box"><div class="num" id="convCount">${conversationHistory.size}</div><div class="label">محادثات</div></div>
+    <div class="stat-box"><div class="num" id="disabledCount">${aiDisabledPhones.length}</div><div class="label">ممنوعين</div></div>
   </div>
 </div>
 
 <div class="card">
   <h2>🔇 إيقاف الزكاء عن رقم</h2>
-  <form action="/admin/disable" method="get">
+  <form action="/admin/disable${authToken ? "?token=" + authToken : ""}" method="get">
     <input name="num" placeholder="آخر 9 أرقام" required>
     <button type="submit" class="btn btn-red btn-sm">🔇 إيقاف</button>
   </form>
@@ -99,21 +115,29 @@ ${!connected ? `<div class="card" style="text-align:center" id="qrCard">
   <div id="qrWrap">${getLatestQr() ? `<img src="/admin/qr.png" class="qr-img" alt="QR">` : `<p style="color:#888;font-size:13px" id="qrWait">جاري التوليد...</p>`}</div>
 </div>` : ""}
 
-<div class="card">
+<div class="card" id="conversationsCard">
   <h2>💬 المحادثات (${conversationHistory.size})</h2>
-  <table>${convRows || '<tr><td style="color:#888;text-align:center">لا يوجد</td></tr>'}</table>
+  <div id="convList"><table>${convRows || '<tr><td style="color:#888;text-align:center">لا يوجد</td></tr>'}</table></div>
 </div>
 
-<div class="card">
+<div class="card" id="contactsCard">
   <h2>📋 جهات الاتصال</h2>
   <div id="contactsList" style="font-size:13px">جاري التحميل...</div>
+</div>
+
+<div class="card" id="notifCard">
+  <h2>🔔 الإشعارات</h2>
+  <p style="margin:6px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <button id="soundBtn" onclick="toggleSound()" style="background:none;border:1px solid #555;color:#eee;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:14px">🔔</button> صوت
+    <button id="notifBtn" onclick="toggleDesktopNotif()" style="background:none;border:1px solid #555;color:#eee;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:14px">🔔</button> إشعار سطح المكتب
+    <span id="vibeStatus" style="font-size:12px;color:#8696a0">📳 متاح</span>
+  </p>
 </div>
 
 <div class="card">
   <h2>ℹ️ معلومات</h2>
   <p style="font-size:12px;color:#8696a0">آخر خطأ: ${stats.lastError || "لا يوجد"}</p>
   <p style="font-size:12px;color:#8696a0">آخر فرع: ${stats.lastBranch || "-"}</p>
-  <p style="margin-top:8px"><button id="soundBtn" onclick="toggleSound()" style="background:none;border:1px solid #555;color:#eee;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:14px">🔔</button> صوت الإشعارات</p>
 </div>
 
 <div class="fab">
@@ -123,11 +147,121 @@ ${!connected ? `<div class="card" style="text-align:center" id="qrCard">
 
 <div class="footer"><a href="/admin">تحديث الصفحة</a></div>
 <script>
+// Notification state
+let soundOn = true;
+let desktopNotifOn = true;
+try { soundOn = localStorage.getItem("notif_sound") !== "off"; } catch(e) {}
+try { desktopNotifOn = localStorage.getItem("notif_desktop") !== "off"; } catch(e) {}
+if (typeof Notification !== "undefined" && Notification.permission === "default") {
+  Notification.requestPermission();
+}
+
+// Shared AudioContext (resume on first user click)
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+}
+document.addEventListener("click", getAudioCtx, { once: true });
+
+function beep() {
+  if (!soundOn) return;
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    // Three-tone ascending notification chime
+    const tones = [
+      {f:660, t:0, d:0.12},
+      {f:880, t:0.14, d:0.12},
+      {f:1100, t:0.28, d:0.18},
+    ];
+    for (const t of tones) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = t.f; o.type = "sine";
+      g.gain.setValueAtTime(0.3, now + t.t);
+      g.gain.exponentialRampToValueAtTime(0.01, now + t.t + t.d);
+      o.start(now + t.t); o.stop(now + t.t + t.d);
+    }
+  } catch(e) {}
+}
+
+function vibrate() {
+  try { if (navigator.vibrate) navigator.vibrate([100,50,100]); } catch(e) {}
+}
+
+function showDesktopNotif(title, body) {
+  if (!desktopNotifOn) return;
+  try {
+    if (Notification.permission === "granted") {
+      new Notification(title, { body, icon: "/admin/qr.png" });
+    }
+  } catch(e) {}
+}
+
+function showToast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.style.display = "block";
+  setTimeout(() => { el.style.display = "none"; }, 3000);
+}
+
+function flashCard(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add("flash");
+  setTimeout(() => el.classList.remove("flash"), 600);
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  try { localStorage.setItem("notif_sound", soundOn ? "on" : "off"); } catch(e) {}
+  document.getElementById("soundBtn").textContent = soundOn ? "🔔" : "🔇";
+  showToast(soundOn ? "الصوت مفعل" : "الصوت متوقف");
+}
+
+function toggleDesktopNotif() {
+  if (typeof Notification === "undefined") return;
+  if (Notification.permission === "denied") {
+    showToast("الإشعارات مرفوضة من المتصفح");
+    return;
+  }
+  if (Notification.permission === "default") {
+    Notification.requestPermission().then(function(p) {
+      if (p === "granted") {
+        desktopNotifOn = true;
+        try { localStorage.setItem("notif_desktop", "on"); } catch(e) {}
+        document.getElementById("notifBtn").textContent = "🔔";
+        showToast("تم تفعيل إشعارات سطح المكتب");
+      }
+    });
+    return;
+  }
+  desktopNotifOn = !desktopNotifOn;
+  try { localStorage.setItem("notif_desktop", desktopNotifOn ? "on" : "off"); } catch(e) {}
+  document.getElementById("notifBtn").textContent = desktopNotifOn ? "🔔" : "🔇";
+  showToast(desktopNotifOn ? "إشعارات سطح المكتب مفعلة" : "إشعارات سطح المكتب متوقفة");
+}
+
+// Check vibration support
+try { if (!navigator.vibrate) document.getElementById("vibeStatus").textContent = "📳 غير متاح"; } catch(e) {}
+
+// SSE connection
 var evtSource = new EventSource("/events");
 evtSource.addEventListener("message", function(e) {
   try {
     var d = JSON.parse(e.data);
-    if (d && d.from) beep();
+    if (d && d.from) {
+      var phone = d.from.split("@")[0].replace(/[^0-9]/g, "");
+      var name = d.name || phone;
+      beep();
+      vibrate();
+      showDesktopNotif("📩 رسالة جديدة من " + name, phone + (d.text ? ": " + d.text.substring(0, 60) : ""));
+      showToast("رسالة من " + name);
+      flashCard("conversationsCard");
+    }
   } catch(x) {}
 });
 evtSource.addEventListener("connected", function(e) {
@@ -135,39 +269,36 @@ evtSource.addEventListener("connected", function(e) {
     document.getElementById("qrWait").outerHTML = '<img src="/admin/qr.png?' + Date.now() + '" class="qr-img" alt="QR">';
   }
 });
-let soundOn = true;
-try { soundOn = localStorage.getItem("notif_sound") !== "off"; } catch(e) {}
-function beep() {
-  if (!soundOn) return;
-  try {
-    const ctx = new (window.AudioContext||window.webkitAudioContext)();
-    for(let f of [800,1000]) {
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.connect(g); g.connect(ctx.destination);
-      o.frequency.value = f; o.type = "sine";
-      g.gain.setValueAtTime(0.25, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
-      o.start(ctx.currentTime + (f===800?0:0.15)); o.stop(ctx.currentTime + (f===800?0.25:0.4));
-    }
-  } catch(e) {}
-}
-function toggleSound() {
-  soundOn = !soundOn;
-  try { localStorage.setItem("notif_sound", soundOn ? "on" : "off"); } catch(e) {}
-  document.getElementById("soundBtn").textContent = soundOn ? "🔔" : "🔇";
-}
-fetch("/api/contacts").then(r=>r.json()).then(list=>{
-  document.getElementById("contactsList").innerHTML = list.length === 0
+
+// Load contacts with inline toggles
+function renderContacts(list) {
+  var html = list.length === 0
     ? '<span style="color:#888;font-size:13px">لا توجد جهات اتصال بعد. سيتم إضافة المرسلين تلقائياً.</span>'
-    : '<table>' + list.map(c =>
-      '<tr><td style="padding:4px 0">' + c.name + '</td>' +
-      '<td style="padding:4px 0;direction:ltr;text-align:right">' + c.phone + '</td>' +
-      '<td style="padding:4px 0"><a href="#" onclick="toggleContact(\'' + c.phone + '\');return false" style="color:' + (c.status==='active'?'#4caf50':'#e94560') + ';text-decoration:none">' + (c.status==='active'?'✅':'🔇') + '</a></td></tr>'
-    ).join('') + '</table>';
-}).catch(()=>{document.getElementById("contactsList").innerHTML='<span style="color:#888">فارغ</span>'});
+    : '<table>' + list.map(function(c) {
+        var isActive = c.status === "active";
+        return '<tr><td style="padding:4px 0">' + escapeHtml(c.name) + '</td>' +
+          '<td style="padding:4px 0;direction:ltr;text-align:right">' + c.phone + '</td>' +
+          '<td style="padding:4px 0"><button onclick="toggleContact(\'' + c.phone + '\')" style="background:none;border:none;cursor:pointer;font-size:18px;color:' + (isActive ? '#4caf50' : '#e94560') + '" title="' + (isActive ? 'اضغط للإيقاف' : 'اضغط للتفعيل') + '">' + (isActive ? '✅' : '🔇') + '</button></td></tr>';
+      }).join('') + '</table>';
+  document.getElementById("contactsList").innerHTML = html;
+}
+
+function escapeHtml(s) {
+  if (!s) return "";
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+fetch("/api/contacts").then(function(r){return r.json()}).then(renderContacts).catch(function(){
+  document.getElementById("contactsList").innerHTML='<span style="color:#888">فارغ</span>';
+});
+
 function toggleContact(phone) {
-  fetch("/api/toggle-status", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
-  .then(r=>r.json()).then(function(d){location.reload()}).catch(function(){});
+  var btn = event && event.target;
+  if (btn) btn.disabled = true;
+  fetch("/api/toggle-status", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:phone})})
+  .then(function(r){return r.json()}).then(function(){
+    return fetch("/api/contacts").then(function(r){return r.json()});
+  }).then(renderContacts).catch(function(){});
 }
 </script>
 </body>

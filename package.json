@@ -1,5 +1,5 @@
 {
-  "name": "maher-fire-safety-bot",
+  "name": "whatsapp-bot",
   "version": "2.0.0",
   "description": "WhatsApp bot for Maher Al-Badri Fire Safety Workshop",
   "main": "src/index.js",
