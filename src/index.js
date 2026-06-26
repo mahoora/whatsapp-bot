@@ -146,6 +146,7 @@ app.get("/diag", (req, res) => {
     aiMode: aiMode.current,
     aiDisabledCount: aiDisabledPhones.length,
     user: getSock()?.user?.id,
+    hasQr: !!getLatestQr(),
   });
 });
 
@@ -159,6 +160,11 @@ app.get("/history", (req, res) => {
   const obj = {};
   for (const [key, val] of conversationHistory) obj[key] = val.slice(-10);
   res.json(obj);
+});
+
+app.get("/admin/qr-status", (req, res) => {
+  const qr = getLatestQr();
+  res.json({ hasQr: !!qr, connected: isConnected() });
 });
 
 const { setOnMessage } = require("./message-handler");

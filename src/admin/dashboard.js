@@ -248,6 +248,18 @@ function toggleDesktopNotif() {
 // Check vibration support
 try { if (!navigator.vibrate) document.getElementById("vibeStatus").textContent = "📳 غير متاح"; } catch(e) {}
 
+function updateQR() {
+  var wrap = document.getElementById("qrWrap");
+  if (!wrap) return;
+  fetch("/admin/qr-status").then(function(r){return r.json()}).then(function(d){
+    if (d.hasQr) {
+      wrap.innerHTML = '<img src="/admin/qr.png?' + Date.now() + '" class="qr-img" alt="QR">';
+    } else if (!d.connected && !wrap.querySelector("img")) {
+      wrap.innerHTML = '<p style="color:#888;font-size:13px" id="qrWait">جاري التوليد...</p>';
+    }
+  }).catch(function(){});
+}
+
 // SSE connection
 var evtSource = new EventSource("/events");
 evtSource.addEventListener("message", function(e) {
@@ -265,10 +277,10 @@ evtSource.addEventListener("message", function(e) {
   } catch(x) {}
 });
 evtSource.addEventListener("connected", function(e) {
-  if (document.getElementById("qrWait") && e.data) {
-    document.getElementById("qrWait").outerHTML = '<img src="/admin/qr.png?' + Date.now() + '" class="qr-img" alt="QR">';
-  }
+  updateQR();
 });
+// Poll QR every 3s if disconnected
+setInterval(updateQR, 3000);
 
 // Load contacts with inline toggles
 function renderContacts(list) {

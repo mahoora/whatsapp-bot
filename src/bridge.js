@@ -73,11 +73,12 @@ async function startBridge(adminJid, aiDisabledPhones, aiMode, stats, broadcast)
     }
     if (connection === "close") {
       wsConnected = false;
+      latestQr = null;
       console.log("Disconnected. Reason: " + (lastDisconnect?.error?.message || "unknown"));
       if (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut && !restartTimer) {
         restartTimer = setTimeout(() => {
           restartTimer = null;
-          startBridge(adminJid, aiDisabledPhones, aiMode, stats);
+          startBridge(adminJid, aiDisabledPhones, aiMode, stats, broadcast);
         }, 10000);
       }
     }
