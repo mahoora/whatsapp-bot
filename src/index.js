@@ -3,6 +3,8 @@ require("dotenv").config();
 const express = require("express");
 const fs = require("fs");
 const https = require("https");
+const http = require("http");
+const { Server } = require("socket.io");
 const { startBridge, getSock, isConnected, getLatestQr, restartBridge, getBridgeInfo } = require("./bridge");
 const { createDashboard } = require("./admin/dashboard");
 const { loadHistory, saveHistory } = require("./message-handler");
@@ -49,20 +51,69 @@ function keepAlive() {
 
 const app = express();
 app.use(express.json());
+app.use(express.static("public"));
 
 const apiLimiter = rateLimit(30, 60000);
 app.use("/api", apiLimiter);
 app.post("/send", rateLimit(10, 60000));
 app.post("/order", rateLimit(10, 60000));
 
-app.use("/", createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, aiMode, stats, ADMIN_JID, ADMIN_PASSWORD));
+// === API routes (must be BEFORE dashboard router to avoid auth blocking) ===
+const { FAMILY } = require("./config/family");
+const { setOnMessage } = require("./message-handler");
 
-const sseClients = [];
+function loadFamilyContacts() {
+  try { return JSON.parse(fs.readFileSync("./family-contacts.json")); }
+  catch (e) {
+    const defaults = FAMILY.map(f => ({ phone: f.phone, name: f.name, relationship: f.relationship }));
+    try { fs.writeFileSync("./family-contacts.json", JSON.stringify(defaults, null, 2)); } catch(e2) {}
+    return defaults;
+  }
+}
 
-app.get("/events", (req, res) => {
-  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
-  sseClients.push(res);
-  req.on("close", () => { const i = sseClients.indexOf(res); if(i>=0) sseClients.splice(i,1); });
+app.get("/api/contacts", (req, res) => {
+  res.json(contactsDb.getContacts());
+});
+
+app.get("/api/family-contacts", (req, res) => {
+  const list = loadFamilyContacts();
+  res.json(list.map(c => ({
+    ...c,
+    aiDisabled: aiDisabledPhones.some(p => {
+      const clean = c.phone.replace(/[^0-9]/g, "");
+      if (!clean) return false;
+      return p.includes(clean) || clean.includes(p);
+    })
+  })));
+});
+
+app.get("/toggle-ai/:phone", (req, res) => {
+  let phone = req.params.phone.replace(/[^0-9]/g, "");
+  if (!phone) return res.status(400).json({ error: "Invalid phone" });
+  const idx = aiDisabledPhones.findIndex(p => p.includes(phone) || phone.includes(p));
+  if (idx >= 0) {
+    aiDisabledPhones.splice(idx, 1);
+    fs.writeFileSync("./ai-disabled.json", JSON.stringify(aiDisabledPhones));
+    return res.json({ phone, disabled: false });
+  } else {
+    aiDisabledPhones.push(phone);
+    fs.writeFileSync("./ai-disabled.json", JSON.stringify(aiDisabledPhones));
+    return res.json({ phone, disabled: true });
+  }
+});
+
+app.post("/api/toggle-status", (req, res) => {
+  const { phone } = req.body;
+  if (!phone) return res.status(400).json({ error: "Missing phone" });
+  const status = contactsDb.toggleStatus(phone);
+  if (status) {
+    contactsDb.refresh();
+    res.json({ phone, status });
+  } else {
+    contactsDb.upsertContact("Unknown", phone, "inactive");
+    contactsDb.refresh();
+    res.json({ phone, status: "inactive" });
+  }
 });
 
 app.get("/status", (req, res) => {
@@ -117,59 +168,6 @@ app.patch("/orders/:id/status", (req, res) => {
   res.json(order);
 });
 
-const { FAMILY } = require("./config/family");
-
-function loadFamilyContacts() {
-  try { return JSON.parse(fs.readFileSync("./family-contacts.json")); }
-  catch (e) {
-    const defaults = FAMILY.map(f => ({ phone: f.phone, name: f.name, relationship: f.relationship }));
-    try { fs.writeFileSync("./family-contacts.json", JSON.stringify(defaults, null, 2)); } catch(e2) {}
-    return defaults;
-  }
-}
-
-app.get("/api/contacts", (req, res) => {
-  res.json(contactsDb.getContacts());
-});
-
-app.get("/api/family-contacts", (req, res) => {
-  const list = loadFamilyContacts();
-  res.json(list.map(c => ({
-    ...c,
-    aiDisabled: aiDisabledPhones.some(p => {
-      const clean = c.phone.replace(/[^0-9]/g, "");
-      return p.includes(clean) || clean.includes(p);
-    })
-  })));
-});
-
-app.get("/toggle-ai/:phone", (req, res) => {
-  let phone = req.params.phone.replace(/[^0-9]/g, "");
-  if (!phone) return res.status(400).json({ error: "Invalid phone" });
-  const idx = aiDisabledPhones.findIndex(p => p.includes(phone) || phone.includes(p));
-  if (idx >= 0) {
-    aiDisabledPhones.splice(idx, 1);
-  } else {
-    aiDisabledPhones.push(phone);
-  }
-  fs.writeFileSync("./ai-disabled.json", JSON.stringify(aiDisabledPhones));
-  res.json({ phone, disabled: idx < 0 });
-});
-
-app.post("/api/toggle-status", (req, res) => {
-  const { phone } = req.body;
-  if (!phone) return res.status(400).json({ error: "Missing phone" });
-  const status = contactsDb.toggleStatus(phone);
-  if (status) {
-    contactsDb.refresh();
-    res.json({ phone, status });
-  } else {
-    const upserted = contactsDb.upsertContact("Unknown", phone, "inactive");
-    contactsDb.refresh();
-    res.json({ phone, status: "inactive" });
-  }
-});
-
 app.get("/diag", (req, res) => {
   res.json({
     msgCount: stats.msgCount,
@@ -186,11 +184,6 @@ app.get("/diag", (req, res) => {
   });
 });
 
-function broadcast(event, data) {
-  const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  for (const c of sseClients) try { c.write(msg); } catch(e) { const i = sseClients.indexOf(c); if(i>=0) sseClients.splice(i,1); }
-}
-
 app.get("/history", (req, res) => {
   const { conversationHistory } = require("./message-handler");
   const obj = {};
@@ -203,10 +196,8 @@ app.get("/admin/qr-status", (req, res) => {
   res.json({ hasQr: !!qr, connected: isConnected() });
 });
 
-const { setOnMessage } = require("./message-handler");
-setOnMessage((data) => broadcast("message", data));
-
-loadHistory();
+// === Dashboard router (handles /admin routes) ===
+app.use("/", createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, aiMode, stats, ADMIN_JID, ADMIN_PASSWORD));
 
 app.get("/admin/restart", (req, res) => {
   restartBridge(ADMIN_JID, aiDisabledPhones, aiMode, stats, broadcast).then(() => {
@@ -227,11 +218,45 @@ app.get("/admin/clear-qr", (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
+// === Socket.IO for real-time notifications ===
+const server = http.createServer(app);
+const io = new Server(server);
+
+io.on("connection", (socket) => {
+  console.log("Socket.IO client connected");
+  socket.on("disconnect", () => console.log("Socket.IO client disconnected"));
+});
+
+// Replace SSE broadcast with Socket.IO + SSE fallback
+const sseClients = [];
+
+function broadcast(event, data) {
+  // Socket.IO
+  io.emit(event, data);
+  // SSE fallback
+  const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const c of sseClients) try { c.write(msg); } catch(e) { const i = sseClients.indexOf(c); if(i>=0) sseClients.splice(i,1); }
+}
+
+// SSE endpoint (kept for compatibility)
+app.get("/events", (req, res) => {
+  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+  sseClients.push(res);
+  req.on("close", () => { const i = sseClients.indexOf(res); if(i>=0) sseClients.splice(i,1); });
+});
+
+setOnMessage((data) => {
+  broadcast("message", data);
+  // Also explicitly emit "new_message" for socket.io
+  io.emit("new_message", data);
+});
+
+loadHistory();
+
+server.listen(PORT, () => {
   console.log("Bot server on http://localhost:" + PORT);
   keepAlive();
   startBridge(ADMIN_JID, aiDisabledPhones, aiMode, stats, broadcast);
-  // Auto-restart if not connected after 45s
   setTimeout(() => {
     if (!isConnected() && !getLatestQr()) {
       console.log("No QR after 45s, restarting bridge...");

@@ -44,6 +44,7 @@ function createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, ai
 <meta charset="utf-8">
 <title>تحكم البوت - ماهر البدري</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/socket.io/socket.io.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:sans-serif;background:linear-gradient(135deg,#0b141a,#15222b);color:#eee;padding:20px;max-width:500px;margin:auto;min-height:100vh}
@@ -311,49 +312,66 @@ function updateQR() {
   }).catch(function(){});
 }
 
-// SSE connection
+// SSE connection (fallback)
 var evtSource = new EventSource("/events");
-evtSource.addEventListener("message", function(e) {
-  try {
-    var d = JSON.parse(e.data);
-    if (d && d.from) {
-      var phone = d.from.split("@")[0].replace(/[^0-9]/g, "");
-      var name = d.name || phone;
-      beep();
-      vibrate();
-      showDesktopNotif("📩 رسالة جديدة من " + name, phone + (d.text ? ": " + d.text.substring(0, 60) : ""));
-      showToast("رسالة من " + name);
-      flashCard("conversationsCard");
-    }
-  } catch(x) {}
-});
 evtSource.addEventListener("connected", function(e) {
   updateQR();
 });
 // Poll QR every 3s if disconnected
 setInterval(updateQR, 3000);
 
+// Socket.IO connection
+var socket = io();
+socket.on("new_message", function(data) {
+  console.log("Socket.IO new_message:", data);
+  // Play notification.wav
+  try {
+    var snd = new Audio("/notification.wav");
+    snd.volume = 0.3;
+    snd.play().catch(function(){ beep(); });
+  } catch(e) { beep(); }
+  vibrate();
+  var phone = (data && data.from) ? data.from.split("@")[0].replace(/[^0-9]/g, "") : "";
+  var name = (data && data.name) || phone || "Unknown";
+  showDesktopNotif("📩 رسالة جديدة من " + name, phone + (data && data.text ? ": " + data.text.substring(0, 60) : ""));
+  showToast("رسالة من " + name);
+  flashCard("conversationsCard");
+});
+
 function loadFamily() {
   var el = document.getElementById("familyList");
-  if (!el) return;
+  if (!el) { setTimeout(loadFamily, 500); return; }
   el.innerHTML = "جاري التحميل...";
-  fetch("/api/family-contacts").then(function(r){return r.json()}).then(function(list){
-    el.innerHTML = list.length === 0 ? '<span style="color:#888">لا يوجد</span>'
+  fetch("/api/family-contacts").then(function(r){
+    console.log("family-contacts status:", r.status);
+    return r.json();
+  }).then(function(list){
+    console.log("family-contacts data:", list);
+    el.innerHTML = list.length === 0 ? '<span style="color:#888">لا يوجد أفراد عائلة</span>'
       : '<table>' + list.map(function(c){
-          var phone = c.phone.replace(/[^0-9]/g,"");
+          var phone = (c.phone||"").replace(/[^0-9]/g,"");
+          var hasPhone = phone.length > 0;
           var checked = !c.aiDisabled;
-          return '<tr><td style="padding:4px 0">' + c.name.replace(/[<>&"]/g,'') + '</td>' +
-            '<td style="padding:4px;direction:ltr;text-align:right;font-size:12px">' + (c.phone || '-') + '</td>' +
-            '<td style="padding:4px"><label class="switch"><input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleAI(\'' + phone + '\',this)"><span class="slider"></span></label></td></tr>';
+          return '<tr><td style="padding:4px 0">' + (c.name||"").replace(/[<>&"]/g,'') + '</td>' +
+            '<td style="padding:4px;direction:ltr;text-align:right;font-size:12px;color:' + (hasPhone?'#e9edef':'#888') + '">' + (c.phone || '⚠️ أدخل الرقم') + '</td>' +
+            '<td style="padding:4px">' + (hasPhone
+              ? '<label class="switch"><input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleAI(\'' + phone + '\',this)"><span class="slider"></span></label>'
+              : '<span style="color:#555;font-size:11px">بدون رقم</span>') + '</td></tr>';
         }).join('') + '</table>';
-  }).catch(function(){ if(el) el.innerHTML='<span style="color:#888">خطأ في التحميل</span>'; });
+  }).catch(function(e){
+    console.error("family-contacts error:", e);
+    if(el) el.innerHTML='<span style="color:#e94560">خطأ: ' + (e.message||e) + '</span>';
+  });
 }
 
 function toggleAI(phone, cb) {
-  if (!phone) return;
+  if (!phone) { cb.checked = !cb.checked; return; }
   fetch("/toggle-ai/" + phone).then(function(r){return r.json()}).then(function(d){
     cb.checked = !d.disabled;
-  }).catch(function(){ cb.checked = !cb.checked; });
+  }).catch(function(e){
+    console.error("toggleAI error:", e);
+    cb.checked = !cb.checked;
+  });
 }
 
 function toggleContact(phone) {

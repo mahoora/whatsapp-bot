@@ -87,6 +87,7 @@ async function startBridge(adminJid, aiDisabledPhones, aiMode, stats, broadcast)
       if (connection === "open") {
         wsConnected = true;
         starting = false;
+        bridgeAttempts = 0; // Reset attempts on successful connection
         console.log(`Bridge #${attempt}: WhatsApp connected! ` + (sock.user?.id || ""));
         if (broadcast) broadcast("connected", { connected: true });
       }
@@ -95,15 +96,22 @@ async function startBridge(adminJid, aiDisabledPhones, aiMode, stats, broadcast)
         latestQr = null;
         starting = false;
         const reason = lastDisconnect?.error?.output?.statusCode;
-        const msg = lastDisconnect?.error?.message || "unknown";
+        const msg = (lastDisconnect?.error?.message || lastDisconnect?.error?.toString?.() || "unknown").substring(0, 200);
         console.log(`Bridge #${attempt}: disconnected. Reason: ${msg} (code: ${reason})`);
         stats.lastError = "DISCONNECT: " + msg + " (code: " + reason + ")";
-        if (reason !== DisconnectReason.loggedOut && !restartTimer) {
-          console.log(`Bridge #${attempt}: will reconnect in 10s`);
+        // Reconnect for any reason except logged out (including 515, 503, etc.)
+        const isLoggedOut = reason === DisconnectReason.loggedOut;
+        const maxRetries = 50;
+        if (!isLoggedOut && !restartTimer && bridgeAttempts < maxRetries) {
+          const delay = Math.min(30000, 5000 + bridgeAttempts * 2000); // 5s → 30s
+          console.log(`Bridge #${attempt}: will reconnect in ${delay/1000}s (attempt ${bridgeAttempts}/${maxRetries})`);
           restartTimer = setTimeout(() => {
             restartTimer = null;
             startBridge(adminJid, aiDisabledPhones, aiMode, stats, broadcast);
-          }, 10000);
+          }, delay);
+        } else if (bridgeAttempts >= maxRetries) {
+          console.log(`Bridge #${attempt}: max reconnection attempts (${maxRetries}) reached.`)
+          stats.lastError = "MAX_RETRIES: توقف إعادة الاتصال بعد " + maxRetries + " محاولة";
         }
       }
       if (connection === "connecting") {
