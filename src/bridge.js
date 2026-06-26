@@ -56,12 +56,18 @@ let wsConnected = false;
 let latestQr = null;
 let restartTimer = null;
 let starting = false;
+let bridgeAttempts = 0;
+let lastConnEvent = null;
 
 async function startBridge(adminJid, aiDisabledPhones, aiMode, stats, broadcast) {
   if (starting) return;
   starting = true;
+  bridgeAttempts++;
+  const attempt = bridgeAttempts;
+  console.log(`Bridge attempt #${attempt}...`);
   try {
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+    console.log(`Bridge #${attempt}: auth state loaded`);
 
     sock = makeWASocket({
       printQRInTerminal: true,
@@ -69,33 +75,43 @@ async function startBridge(adminJid, aiDisabledPhones, aiMode, stats, broadcast)
       logger,
       browser: ["Chrome", "Chrome", "120.0"],
     });
+    console.log(`Bridge #${attempt}: socket created`);
 
     sock.ev.on("creds.update", () => { saveCreds(); saveCredsToEnv(); });
 
-    sock.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
+    sock.ev.on("connection.update", (update) => {
+      lastConnEvent = update;
+      const { connection, lastDisconnect, qr } = update;
       if (qr) {
         latestQr = qr;
         qrcode.generate(qr, { small: true });
-        console.log("QR generated for WhatsApp pairing");
+        console.log(`Bridge #${attempt}: QR generated`);
         if (broadcast) broadcast("connected", { qr: true });
       }
       if (connection === "open") {
         wsConnected = true;
         starting = false;
-        console.log("WhatsApp connected! " + (sock.user?.id || ""));
+        console.log(`Bridge #${attempt}: WhatsApp connected! ` + (sock.user?.id || ""));
+        if (broadcast) broadcast("connected", { connected: true });
       }
       if (connection === "close") {
         wsConnected = false;
         latestQr = null;
         starting = false;
         const reason = lastDisconnect?.error?.output?.statusCode;
-        console.log("Disconnected. Reason: " + (lastDisconnect?.error?.message || "unknown") + " (code: " + reason + ")");
+        const msg = lastDisconnect?.error?.message || "unknown";
+        console.log(`Bridge #${attempt}: disconnected. Reason: ${msg} (code: ${reason})`);
+        stats.lastError = "DISCONNECT: " + msg + " (code: " + reason + ")";
         if (reason !== DisconnectReason.loggedOut && !restartTimer) {
+          console.log(`Bridge #${attempt}: will reconnect in 10s`);
           restartTimer = setTimeout(() => {
             restartTimer = null;
             startBridge(adminJid, aiDisabledPhones, aiMode, stats, broadcast);
           }, 10000);
         }
+      }
+      if (connection === "connecting") {
+        console.log(`Bridge #${attempt}: connecting...`);
       }
     });
 
@@ -113,7 +129,8 @@ async function startBridge(adminJid, aiDisabledPhones, aiMode, stats, broadcast)
 
     return sock;
   } catch (e) {
-    console.error("startBridge error:", e.message);
+    console.error(`Bridge #${attempt}: error:`, e.message);
+    stats.lastError = "BRIDGE_ERR: " + e.message;
     starting = false;
     setTimeout(() => {
       startBridge(adminJid, aiDisabledPhones, aiMode, stats, broadcast);
@@ -144,4 +161,14 @@ async function restartBridge(adminJid, aiDisabledPhones, aiMode, stats, broadcas
   return startBridge(adminJid, aiDisabledPhones, aiMode, stats, broadcast);
 }
 
-module.exports = { startBridge, getSock, isConnected, getLatestQr, restartBridge };
+function getBridgeInfo() {
+  return {
+    attempts: bridgeAttempts,
+    connected: wsConnected,
+    hasQr: !!latestQr,
+    lastConnEvent: lastConnEvent ? { connection: lastConnEvent.connection, hasQr: !!lastConnEvent.qr, disconnectReason: lastConnEvent.lastDisconnect?.error?.message } : null,
+    starting,
+  };
+}
+
+module.exports = { startBridge, getSock, isConnected, getLatestQr, restartBridge, getBridgeInfo };

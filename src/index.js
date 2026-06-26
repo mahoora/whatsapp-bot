@@ -3,7 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const fs = require("fs");
 const https = require("https");
-const { startBridge, getSock, isConnected, getLatestQr, restartBridge } = require("./bridge");
+const { startBridge, getSock, isConnected, getLatestQr, restartBridge, getBridgeInfo } = require("./bridge");
 const { createDashboard } = require("./admin/dashboard");
 const { loadHistory, saveHistory } = require("./message-handler");
 const ordersDb = require("./orders-db");
@@ -147,6 +147,7 @@ app.get("/diag", (req, res) => {
     aiDisabledCount: aiDisabledPhones.length,
     user: getSock()?.user?.id,
     hasQr: !!getLatestQr(),
+    bridge: getBridgeInfo(),
   });
 });
 
