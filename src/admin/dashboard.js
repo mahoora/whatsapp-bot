@@ -141,7 +141,6 @@ ${!connected ? `
 <div class="card qr-container">
   <h2>📷 امسح باركود الواتساب للربط</h2>
   <img src="/admin/qr.png${authToken ? "?token=" + authToken : ""}" class="qr-img" alt="QR Code">
-  <p style="font-size:12px;color:#8696a0;margin-top:8px">يرجى فتح الواتساب في جوالك واختيار الأجهزة المرتبطة ثم مسح الكود</p>
 </div>` : ''}
 
 <div class="card" id="familyCard">
@@ -232,7 +231,7 @@ function loadFamily() {
           return '<div class="family-card">' +
             '<div class="family-info">' +
               '<span style="font-weight:bold">' + safeName + ' (' + c.relationship + ')</span>' +
-              '<span id="fp_' + i + '" ' + (hasPhone ? 'style="color:#8696a0;font-size:11px"' : 'onclick="editFamilyPhone(' + i + ',\'' + safeName + '\')" style="cursor:pointer;color:#00a884;font-size:11px"') + '>' + (safePhone || '➕ أضف رقم') + '</span>' +
+              '<span id="fp_' + i + '" onclick="editFamilyPhone(' + i + ',\'' + safeName + '\')" style="cursor:pointer;color:#00a884;font-size:11px">' + (safePhone || '➕ أضف رقم الهواتف') + '</span>' +
               '<input id="fi_' + i + '" style="display:none;width:100%;padding:4px;background:#1a2a33;color:#fff;font-size:11px;border:1px solid #00a884;border-radius:4px" placeholder="9665..." onblur="saveFamilyPhone(' + i + ',\'' + safeName + '\')">' +
             '</div>' +
             '<div>' + (hasPhone
