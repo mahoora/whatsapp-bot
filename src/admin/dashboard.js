@@ -54,17 +54,17 @@ function createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, ai
     res.json({ updated: false });
   });
 
-  // الـ Endpoint الحقيقي والنهائي لتشغيل وإيقاف الـ AI وحفظه في السيرفر
+  // الـ Endpoint لتشغيل وإيقاف الـ AI وحفظه في السيرفر
   router.get("/admin/toggle-ai/:num", (req, res) => {
     let num = (req.params.num || "").replace(/[^0-9]/g, "");
     let isNowDisabled = false;
     if (num.length >= 5) {
       const idx = aiDisabledPhones.indexOf(num);
       if (idx >= 0) {
-        aiDisabledPhones.splice(idx, 1); // تشغيل (إزالة من قائمة المعطلين)
+        aiDisabledPhones.splice(idx, 1); // تشغيل
         isNowDisabled = false;
       } else {
-        aiDisabledPhones.push(num); // إيقاف (إضافة لقائمة المعطلين)
+        aiDisabledPhones.push(num); // إيقاف
         isNowDisabled = true;
       }
       fs.writeFileSync("./ai-disabled.json", JSON.stringify(aiDisabledPhones, null, 2));
@@ -156,6 +156,58 @@ td{padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
 </div>
 
 <script>
+var socket = io();
+var soundOn = true;
+var audioCtx = null;
+
+try {
+  window.addEventListener('click', function() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }, { once: true });
+} catch(e) {}
+
+function beep() {
+  if (!soundOn) return;
+  try {
+    var ctx = audioCtx;
+    if (ctx && ctx.state !== "closed") {
+      if (ctx.state === "suspended") ctx.resume();
+      if (ctx.state === "running") {
+        var now = ctx.currentTime;
+        var tones = [
+          {f:660, t:0.05, d:0.12},
+          {f:880, t:0.19, d:0.12},
+          {f:1100, t:0.33, d:0.18},
+        ];
+        for (var i = 0; i < tones.length; i++) {
+          var t = tones[i];
+          var o = ctx.createOscillator();
+          var g = ctx.createGain();
+          o.connect(g); g.connect(ctx.destination);
+          o.frequency.value = t.f; o.type = "sine";
+          g.gain.setValueAtTime(0.3, now + t.t);
+          g.gain.exponentialRampToValueAtTime(0.01, now + t.t + t.d);
+          o.start(now + t.t); o.stop(now + t.t + t.d);
+        }
+        return;
+      }
+    }
+  } catch(e) {}
+
+  try {
+    var s = new Audio("/notification.wav");
+    s.volume = 0.3; 
+    s.play().catch(function(){});
+  } catch(e) {}
+}
+
+socket.on("new_message", function(data) {
+  if (data && data.fromMe === false) {
+    beep();
+    showToast("رسالة جديدة من: " + (data.pushName || data.sender));
+  }
+});
+
 function showToast(msg) {
   const el = document.getElementById("toast");
   el.textContent = msg; el.style.display = "block";
@@ -170,7 +222,7 @@ function loadFamily() {
       : '<div class="family-grid">' + list.map(function(c, i){
           var phone = (c.phone||"").replace(/[^0-9]/g,"");
           var hasPhone = phone.length > 0;
-          var isAiActive = !c.aiDisabled; // إذا لم يكن معطلاً إذن فهو يعمل
+          var isAiActive = !c.aiDisabled;
           var safeName = (c.name||"").replace(/[<>&"]/g,'');
           var safePhone = (c.phone||"").replace(/[<>&"]/g,'');
           
@@ -189,7 +241,6 @@ function loadFamily() {
 
 function toggleAI(phone, cb) {
   if (!phone) return;
-  // إرسال طلب حقيقي للسيرفر لحفظ التغيير فوراً في الـ json
   fetch("/admin/toggle-ai/" + phone + "${authToken ? "?token=" + authToken : ""}").then(function(r){ return r.json(); }).then(function(d){
     cb.checked = !d.disabled;
     showToast(!d.disabled ? "تم تفعيل الذكاء للرقم" : "تم إيقاف الذكاء للرقم");
