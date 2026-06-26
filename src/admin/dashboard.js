@@ -38,6 +38,45 @@ function createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, ai
         <td><a href="/admin/disable/${encodeURIComponent(phone)}${authToken ? "?token=" + authToken : ""}" class="btn btn-red" style="padding:4px 10px;font-size:12px">${isOff ? "🔇" : "🔊"}</a></td></tr>`;
     }
 
+    // Server-rendered contacts
+    const contactsDb = require("../contacts-db");
+    const allContacts = contactsDb.getContacts();
+    let contactsHtml = allContacts.length === 0
+      ? '<span style="color:#888;font-size:13px">لا توجد جهات اتصال بعد. سيتم إضافة المرسلين تلقائياً.</span>'
+      : '<table>' + allContacts.map(function(c) {
+          var isActive = c.status === "active";
+          var safeName = (c.name||"").replace(/[<>&"]/g,'');
+          var safePhone = (c.phone||"").replace(/[<>&"]/g,'');
+          return '<tr><td style="padding:4px 0">' + safeName + '</td>' +
+            '<td style="padding:4px 0;direction:ltr;text-align:right">' + safePhone + '</td>' +
+            '<td style="padding:4px 0"><button onclick="toggleContact(\'' + safePhone + '\')" style="background:none;border:none;cursor:pointer;font-size:18px;color:' + (isActive ? '#4caf50' : '#e94560') + '" title="' + (isActive ? 'اضغط للإيقاف' : 'اضغط للتفعيل') + '">' + (isActive ? '✅' : '🔇') + '</button></td></tr>';
+        }).join('') + '</table>';
+
+    // Server-rendered family contacts
+    let familyHtml = '<span style="color:#888">جاري التحميل...</span>';
+    try {
+      const raw = fs.readFileSync("./family-contacts.json", "utf8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list) && list.length > 0) {
+        familyHtml = '<table>' + list.map(function(c, i){
+          var phone = (c.phone||"").replace(/[^0-9]/g,"");
+          var hasPhone = phone.length > 0;
+          var checked = !c.aiDisabled;
+          var safeName = (c.name||"").replace(/[<>&"]/g,'');
+          var safePhone = (c.phone||"").replace(/[<>&"]/g,'');
+          return '<tr><td style="padding:4px 0">' + safeName + '</td>' +
+            '<td style="padding:4px;direction:ltr;text-align:right;font-size:12px">' +
+            '<span id="fp_' + i + '" ' + (hasPhone ? '' : 'onclick="editFamilyPhone(' + i + ',\'' + safeName + '\')" style="cursor:pointer;color:#888" title="اضغط لإضافة رقم"') + '>' + (safePhone || '➕ أضف رقم') + '</span>' +
+            '<input id="fi_' + i + '" style="display:none;width:120px;padding:4px;border-radius:6px;border:1px solid #4caf50;background:#1a2a33;color:#e9edef;font-size:12px;direction:ltr" placeholder="مثال: 9665xxxxxxxx" onkeydown="if(event.key==\'Enter\')saveFamilyPhone(' + i + ',\'' + safeName + '\')" onblur="saveFamilyPhone(' + i + ',\'' + safeName + '\')">' +
+            '</td>' +
+            '<td style="padding:4px">' + (hasPhone
+              ? '<label class="switch"><input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleAI(\'' + phone + '\',this)"><span class="slider"></span></label>'
+              : '<span style="color:#555;font-size:11px">بدون رقم</span>') + '</td></tr>';
+        }).join('') + '</table>';
+      }
+    } catch(e) {}
+    // If rendering failed, keep the default "جاري التحميل" text and JS will fill it
+
     res.send(`<!DOCTYPE html>
 <html dir="rtl">
 <head>
@@ -129,12 +168,12 @@ ${!connected ? `<div class="card" style="text-align:center" id="qrCard">
 
 <div class="card" id="contactsCard">
   <h2>📋 جهات الاتصال</h2>
-  <div id="contactsList" style="font-size:13px">جاري التحميل...</div>
+  <div id="contactsList" style="font-size:13px">${contactsHtml}</div>
 </div>
 
 <div class="card" id="familyCard">
   <h2>👨‍👩‍👧‍👦 العائلة - التحكم بالزكاء</h2>
-  <div id="familyList" style="font-size:13px">جاري التحميل...</div>
+  <div id="familyList" style="font-size:13px">${familyHtml}</div>
 </div>
 
 <div class="card" id="notifCard">
