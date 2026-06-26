@@ -35,6 +35,16 @@ try {
   } catch(e2) {}
 }
 
+function saveCredsToEnv() {
+  const p = path.join(AUTH_DIR, "creds.json");
+  if (!fs.existsSync(p)) return;
+  try {
+    const value = fs.readFileSync(p).toString("base64");
+    if (!value) return;
+    process.env.CREDS_JSON = value;
+  } catch (e) {}
+}
+
 let sock = null;
 let wsConnected = false;
 let latestQr = null;
