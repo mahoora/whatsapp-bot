@@ -138,6 +138,10 @@ ${!connected ? `<div class="card" style="text-align:center" id="qrCard">
   <h2>ℹ️ معلومات</h2>
   <p style="font-size:12px;color:#8696a0">آخر خطأ: ${stats.lastError || "لا يوجد"}</p>
   <p style="font-size:12px;color:#8696a0">آخر فرع: ${stats.lastBranch || "-"}</p>
+  <p style="margin-top:10px">
+    <a href="/admin/restart${authToken ? "?token=" + authToken : ""}" class="btn btn-red btn-sm" style="text-decoration:none" onclick="return confirm('إعادة تشغيل اتصال واتساب؟')">🔄 إعادة تشغيل</a>
+    <a href="/admin/clear-qr${authToken ? "?token=" + authToken : ""}" class="btn btn-gray btn-sm" style="text-decoration:none;margin-right:8px" onclick="return confirm('مسح البيانات وإعادة الاتصال؟')">🗑️ مسح وإعادة</a>
+  </p>
 </div>
 
 <div class="fab">

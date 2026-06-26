@@ -3,7 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const fs = require("fs");
 const https = require("https");
-const { startBridge, getSock, isConnected, getLatestQr } = require("./bridge");
+const { startBridge, getSock, isConnected, getLatestQr, restartBridge } = require("./bridge");
 const { createDashboard } = require("./admin/dashboard");
 const { loadHistory, saveHistory } = require("./message-handler");
 const ordersDb = require("./orders-db");
@@ -172,8 +172,34 @@ setOnMessage((data) => broadcast("message", data));
 
 loadHistory();
 
+app.get("/admin/restart", (req, res) => {
+  restartBridge(ADMIN_JID, aiDisabledPhones, aiMode, stats, broadcast).then(() => {
+    res.redirect("/admin" + (ADMIN_PASSWORD ? "?token=" + encodeURIComponent(ADMIN_PASSWORD) : ""));
+  }).catch(e => {
+    res.status(500).send("Restart failed: " + e.message);
+  });
+});
+
+app.get("/admin/clear-qr", (req, res) => {
+  if (getSock()) {
+    try { getSock().end(); } catch(e) {}
+  }
+  restartBridge(ADMIN_JID, aiDisabledPhones, aiMode, stats, broadcast).then(() => {
+    res.redirect("/admin" + (ADMIN_PASSWORD ? "?token=" + encodeURIComponent(ADMIN_PASSWORD) : ""));
+  }).catch(e => {
+    res.status(500).send("Failed: " + e.message);
+  });
+});
+
 app.listen(PORT, () => {
   console.log("Bot server on http://localhost:" + PORT);
   keepAlive();
-  startBridge(ADMIN_JID, aiDisabledPhones, aiMode, stats, broadcast).catch(console.error);
+  startBridge(ADMIN_JID, aiDisabledPhones, aiMode, stats, broadcast);
+  // Auto-restart if not connected after 45s
+  setTimeout(() => {
+    if (!isConnected() && !getLatestQr()) {
+      console.log("No QR after 45s, restarting bridge...");
+      restartBridge(ADMIN_JID, aiDisabledPhones, aiMode, stats, broadcast);
+    }
+  }, 45000);
 });
