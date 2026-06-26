@@ -52,47 +52,30 @@ function createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, ai
             '<td style="padding:4px 0"><button onclick="toggleContact(\'' + safePhone + '\')" style="background:none;border:none;cursor:pointer;font-size:18px;color:' + (isActive ? '#4caf50' : '#e94560') + '" title="' + (isActive ? 'اضغط للإيقاف' : 'اضغط للتفعيل') + '">' + (isActive ? '✅' : '🔇') + '</button></td></tr>';
         }).join('') + '</table>';
 
-// Build family members dropdown options for the form
-let familyDropdownOptions = "";
-try {
-  const raw = fs.readFileSync("./family-contacts.json", "utf8");
-  const list = JSON.parse(raw);
-  if (Array.isArray(list)) {
-    familyDropdownOptions = list.map(function(c) {
-      var n = (c.name||"").replace(/[<>&"]/g,'');
-      return '<option value="' + n + '">' + n + '</option>';
-    }).join('');
-  }
-} catch(e) {}
-
-// Server-rendered family contacts
-let familyHtml = '<span style="color:#888;font-size:13px">لا يوجد أفراد عائلة بعد.</span>';
-try {
-  const raw = fs.readFileSync("./family-contacts.json", "utf8");
-  const list = JSON.parse(raw);
-  if (Array.isArray(list) && list.length > 0) {
-    familyHtml = '<form id="familyForm" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">' +
-      '<select id="famName" style="flex:2;min-width:100px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:rgba(42,57,66,0.8);color:#e9edef;font-size:13px;outline:none">' + familyDropdownOptions + '</select>' +
-      '<input id="famPhone" style="flex:3;min-width:120px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:rgba(42,57,66,0.8);color:#e9edef;font-size:13px;outline:none;direction:ltr" placeholder="9665xxxxxxxx">' +
-      '<button type="button" onclick="savePhoneFromForm()" style="padding:8px 16px;background:#00a884;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px">💾 حفظ</button>' +
-      '</form>' +
-      '<div style="font-size:11px;color:#8696a0;margin-bottom:8px">⬆ اختر الاسم، اكتب الرقم، اضغط حفظ</div>' +
-      '<table>' + list.map(function(c, i){
+    // Server-rendered family contacts (Grid system Layout)
+    let familyHtml = '<span style="color:#888">جاري التحميل...</span>';
+    try {
+      const raw = fs.readFileSync("./family-contacts.json", "utf8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list) && list.length > 0) {
+        familyHtml = '<div class="family-grid">' + list.map(function(c, i){
           var phone = (c.phone||"").replace(/[^0-9]/g,"");
           var hasPhone = phone.length > 0;
           var checked = !c.aiDisabled;
           var safeName = (c.name||"").replace(/[<>&"]/g,'');
           var safePhone = (c.phone||"").replace(/[<>&"]/g,'');
-          return '<tr><td style="padding:6px 0;width:40%">' + safeName + '</td>' +
-            '<td style="padding:6px 0;direction:ltr;text-align:right;font-size:12px;color:' + (hasPhone ? '#e9edef' : '#888') + ';width:35%">' + (safePhone || '—') + '</td>' +
-            '<td style="padding:6px 0;text-align:center;width:25%">' + (hasPhone
+          return '<div class="family-card">' +
+            '<div class="family-info">' +
+              '<span style="font-weight:bold">' + safeName + '</span>' +
+              '<span id="fp_' + i + '" ' + (hasPhone ? 'style="direction:ltr;text-align:right;font-size:11px;color:#8696a0"' : 'onclick="editFamilyPhone(' + i + ',\'' + safeName + '\')" style="cursor:pointer;color:#00a884;font-size:11px" title="اضغط لإضافة رقم"') + '>' + (safePhone || '➕ أضف رقم') + '</span>' +
+              '<input id="fi_' + i + '" style="display:none;width:120px;padding:4px;border-radius:6px;border:1px solid #00a884;background:#1a2a33;color:#e9edef;font-size:11px;direction:ltr" placeholder="مثال: 9665xxxxxxxx" onkeydown="if(event.key==\'Enter\')saveFamilyPhone(' + i + ',\'' + safeName + '\')" onblur="saveFamilyPhone(' + i + ',\'' + safeName + '\')">' +
+            '</div>' +
+            '<div>' + (hasPhone
               ? '<label class="switch"><input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleAI(\'' + phone + '\',this)"><span class="slider"></span></label>'
-              : '<span style="color:#555;font-size:11px">⚠️ بلا رقم</span>') + '</td></tr>';
-        }).join('') + '</table>';
-  }
-} catch(e) {
-  // File doesn't exist yet — show empty state
-}
+              : '<span style="color:#555;font-size:11px">بدون رقم</span>') + '</div></div>';
+        }).join('') + '</div>';
+      }
+    } catch(e) {}
 
     res.send(`<!DOCTYPE html>
 <html dir="rtl">
@@ -133,7 +116,7 @@ td{padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
 .badge{display:inline-block;background:rgba(0,168,132,0.15);color:#00a884;padding:2px 10px;border-radius:20px;font-size:12px;margin:2px}
 .switch{position:relative;display:inline-block;width:42px;height:22px;vertical-align:middle}
 .switch input{opacity:0;width:0;height:0}
-.slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#555;transition:0.3s;border-radius:22px}
+.slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#e94560;transition:0.3s;border-radius:22px}
 .slider:before{position:absolute;content:"";height:16px;width:16px;left:3px;bottom:3px;background:#fff;transition:0.3s;border-radius:50%}
 .switch input:checked+.slider{background:#4caf50}
 .switch input:checked+.slider:before{transform:translateX(20px)}
@@ -143,6 +126,12 @@ td{padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
 .stat-box .label{font-size:11px;color:#8696a0;margin-top:4px}
 .toast{position:fixed;top:20px;right:20px;z-index:999;background:rgba(0,168,132,0.9);color:#fff;padding:12px 20px;border-radius:12px;font-size:14px;max-width:300px;animation:slideIn 0.3s;display:none}
 @keyframes slideIn{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}
+
+/* تنسيقات العرض الجانبي (يمين وشمال) لبطاقات العائلة */
+.family-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+@media(max-width:480px){.family-grid{grid-template-columns:1fr}}
+.family-card{background:rgba(255,255,255,0.03);padding:10px;border-radius:10px;display:flex;justify-content:space-between;align-items:center;border:1px solid rgba(255,255,255,0.05)}
+.family-info{display:flex;flex-direction:column;gap:4px;text-align:right}
 </style>
 </head>
 <body>
@@ -219,7 +208,6 @@ ${!connected ? `<div class="card" style="text-align:center" id="qrCard">
 
 <div class="footer"><a href="/admin">تحديث الصفحة</a></div>
 <script>
-// Notification state
 let soundOn = true;
 let desktopNotifOn = true;
 try { soundOn = localStorage.getItem("notif_sound") !== "off"; } catch(e) {}
@@ -228,7 +216,6 @@ if (typeof Notification !== "undefined" && Notification.permission === "default"
   Notification.requestPermission();
 }
 
-// Load contacts immediately
 (function loadContacts() {
   var el = document.getElementById("contactsList");
   if (!el) { setTimeout(loadContacts, 500); return; }
@@ -246,48 +233,20 @@ if (typeof Notification !== "undefined" && Notification.permission === "default"
   });
 })();
 
-// Sound system
 var audioCtx = null;
-// useBeepFallback removed; oscillator is primary method
+var useBeepFallback = true;
 document.addEventListener("click", function(){
   if (!audioCtx) {
     try { audioCtx = new (window.AudioContext||window.webkitAudioContext)(); } catch(e) {}
   }
   if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+  useBeepFallback = false;
 }, { once: true });
 
 function beep() {
   if (!soundOn) return;
   try {
-    var ctx = audioCtx;
-    if (ctx && ctx.state !== "closed") {
-      if (ctx.state === "suspended") ctx.resume();
-      if (ctx.state === "running") {
-        var now = ctx.currentTime;
-        var tones = [
-          {f:660, t:0.05, d:0.12},
-          {f:880, t:0.19, d:0.12},
-          {f:1100, t:0.33, d:0.18},
-        ];
-        for (var i = 0; i < tones.length; i++) {
-          var t = tones[i];
-          var o = ctx.createOscillator();
-          var g = ctx.createGain();
-          o.connect(g); g.connect(ctx.destination);
-          o.frequency.value = t.f; o.type = "sine";
-          g.gain.setValueAtTime(0.3, now + t.t);
-          g.gain.exponentialRampToValueAtTime(0.01, now + t.t + t.d);
-          o.start(now + t.t); o.stop(now + t.t + t.d);
-        }
-        return;
-      }
-    }
-  } catch(e) {}
-  try {
-    var s = new Audio("/notification.wav");
-    s.volume = 0.3; s.play().catch(function(){});
-  } catch(e) {}
-}
+    if (!useBeepFallback && audioCtx && audioCtx.state !== "closed") {
       if (audioCtx.state === "suspended") audioCtx.resume();
       if (audioCtx.state === "running") {
         var ctx = audioCtx;
@@ -311,10 +270,9 @@ function beep() {
       }
     }
   } catch(e) {}
-  // Fallback: Audio element (works even without user gesture in most browsers)
   try {
     var s = new Audio();
-    s.src = "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACAf39/f3+Af4B/f39/gH+Af39/f39/gH+Af39/f39/gH+Af39/f3+Af4B/f39/f3+Af4B/f39/gH+Af4B/f39/gH+Af4B/f39/gH+Af4B/f39/gH+Af4B/f39/gH+Af4B/f3+Af4B/f3+Af4B/f3+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+Af39/gH+A";
+    s.src = "data:audio/wav;base64,...";
     s.volume = 0.3;
     s.play().catch(function(){});
   } catch(e) {}
@@ -379,7 +337,6 @@ function toggleDesktopNotif() {
 
 loadFamily();
 
-// Check vibration support
 try { if (!navigator.vibrate) document.getElementById("vibeStatus").textContent = "📳 غير متاح"; } catch(e) {}
 
 function updateQR() {
@@ -394,93 +351,79 @@ function updateQR() {
   }).catch(function(){});
 }
 
-// SSE connection (fallback for Socket.IO)
 var evtSource = new EventSource("/events");
 evtSource.addEventListener("connected", function(e) {
   updateQR();
 });
-evtSource.addEventListener("new_message", function(e) {
-  playNotifSound();
+setInterval(updateQR, 3000);
+
+var socket = io();
+socket.on("new_message", function(data) {
+  try {
+    var snd = new Audio("/notification.wav");
+    snd.volume = 0.3;
+    snd.play().catch(function(){ beep(); });
+  } catch(e) { beep(); }
   vibrate();
-  var data = JSON.parse(e.data || "{}");
-  var phone = data.from ? data.from.split("@")[0].replace(/[^0-9]/g, "") : "";
-  var name = data.name || phone || "Unknown";
-  showDesktopNotif("📩 رسالة جديدة من " + name, phone + (data.text ? ": " + data.text.substring(0, 60) : ""));
+  var phone = (data && data.from) ? data.from.split("@")[0].replace(/[^0-9]/g, "") : "";
+  var name = (data && data.name) || phone || "Unknown";
+  showDesktopNotif("📩 رسالة جديدة من " + name, phone + (data && data.text ? ": " + data.text.substring(0, 60) : ""));
   showToast("رسالة من " + name);
   flashCard("conversationsCard");
 });
-// Poll QR every 3s if disconnected
-setInterval(updateQR, 3000);
 
-// Socket.IO connection (wrapped for safety)
-try {
-  var socket = io();
-  socket.on("new_message", function(data) {
-    playNotifSound();
-    vibrate();
-    var phone = (data && data.from) ? data.from.split("@")[0].replace(/[^0-9]/g, "") : "";
-    var name = (data && data.name) || phone || "Unknown";
-    showDesktopNotif("📩 رسالة جديدة من " + name, phone + (data && data.text ? ": " + data.text.substring(0, 60) : ""));
-    showToast("رسالة من " + name);
-    flashCard("conversationsCard");
-  });
-} catch(e) { console.error("Socket.IO error:", e); }
-
-function playNotifSound() {
-  if (!soundOn) return;
-  beep();
-}
-
+// دالة تحميل العائلة المحدثة لتعرض كروت يمين ويسار
 function loadFamily() {
   var el = document.getElementById("familyList");
   if (!el) { setTimeout(loadFamily, 500); return; }
-  fetch("/api/family-contacts").then(function(r){return r.json()}).then(function(list){
-    if (!el) return;
-    if (list.length === 0) {
-      el.innerHTML = '<span style="color:#888;font-size:13px">لا يوجد أفراد عائلة بعد.</span>';
-      return;
-    }
-    var opts = list.map(function(c){ return '<option value="' + (c.name||"").replace(/[<>&"]/g,'') + '">' + (c.name||"").replace(/[<>&"]/g,'') + '</option>'; }).join('');
-    el.innerHTML = '<form id="familyForm" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">' +
-      '<select id="famName" style="flex:2;min-width:100px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:rgba(42,57,66,0.8);color:#e9edef;font-size:13px;outline:none">' + opts + '</select>' +
-      '<input id="famPhone" style="flex:3;min-width:120px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:rgba(42,57,66,0.8);color:#e9edef;font-size:13px;outline:none;direction:ltr" placeholder="9665xxxxxxxx">' +
-      '<button type="button" onclick="savePhoneFromForm()" style="padding:8px 16px;background:#00a884;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px">💾 حفظ</button>' +
-      '</form>' +
-      '<div style="font-size:11px;color:#8696a0;margin-bottom:8px">⬆ اختر الاسم، اكتب الرقم، اضغط حفظ</div>' +
-      '<table>' + list.map(function(c){
+  el.innerHTML = "جاري التحميل...";
+  fetch("/api/family-contacts").then(function(r){
+    return r.json();
+  }).then(function(list){
+    el.innerHTML = list.length === 0 ? '<span style="color:#888">لا يوجد أفراد عائلة</span>'
+      : '<div class="family-grid">' + list.map(function(c, i){
           var phone = (c.phone||"").replace(/[^0-9]/g,"");
           var hasPhone = phone.length > 0;
           var checked = !c.aiDisabled;
           var safeName = (c.name||"").replace(/[<>&"]/g,'');
           var safePhone = (c.phone||"").replace(/[<>&"]/g,'');
-          return '<tr><td style="padding:6px 0;width:40%">' + safeName + '</td>' +
-            '<td style="padding:6px 0;direction:ltr;text-align:right;font-size:12px;color:' + (hasPhone ? '#e9edef' : '#888') + ';width:35%">' + (safePhone || '—') + '</td>' +
-            '<td style="padding:6px 0;text-align:center;width:25%">' + (hasPhone
+          return '<div class="family-card">' +
+            '<div class="family-info">' +
+              '<span style="font-weight:bold">' + safeName + '</span>' +
+              '<span id="fp_' + i + '" ' + (hasPhone ? 'style="direction:ltr;text-align:right;font-size:11px;color:#8696a0"' : 'onclick="editFamilyPhone(' + i + ',\'' + safeName + '\')" style="cursor:pointer;color:#00a884;font-size:11px" title="اضغط لإضافة رقم"') + '>' + (safePhone || '➕ أضف رقم') + '</span>' +
+              '<input id="fi_' + i + '" style="display:none;width:120px;padding:4px;border-radius:6px;border:1px solid #4caf50;background:#1a2a33;color:#e9edef;font-size:11px;direction:ltr" placeholder="مثال: 9665xxxxxxxx" onkeydown="if(event.key==\'Enter\')saveFamilyPhone(' + i + ',\'' + safeName + '\')" onblur="saveFamilyPhone(' + i + ',\'' + safeName + '\')">' +
+            '</div>' +
+            '<div>' + (hasPhone
               ? '<label class="switch"><input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleAI(\'' + phone + '\',this)"><span class="slider"></span></label>'
-              : '<span style="color:#555;font-size:11px">⚠️ بلا رقم</span>') + '</td></tr>';
-        }).join('') + '</table>';
+              : '<span style="color:#555;font-size:11px">بدون رقم</span>') + '</div></div>';
+        }).join('') + '</div>';
   }).catch(function(e){
-    console.error("family-contacts error:", e);
-    if (el) el.innerHTML='<span style="color:#e94560">خطأ: ' + (e.message||e) + '</span>';
+    if(el) el.innerHTML='<span style="color:#e94560">خطأ: ' + (e.message||e) + '</span>';
   });
 }
 
-function savePhoneFromForm() {
-  var nameEl = document.getElementById("famName");
-  var phoneEl = document.getElementById("famPhone");
-  if (!nameEl || !phoneEl) return;
-  var name = nameEl.value;
-  var phone = phoneEl.value.trim();
-  if (!phone) { showToast("اكتب رقم الموبايل أولاً"); return; }
-  fetch("/api/update-family-phone", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:name,phone:phone})})
-  .then(function(r){return r.json()}).then(function(d){
-    if (d.updated) {
-      showToast("✅ تم حفظ رقم " + name);
-      loadFamily();
-    }
-  }).catch(function(){ showToast("❌ فشل الحفظ"); loadFamily(); });
+function editFamilyPhone(idx, name) {
+  var span = document.getElementById("fp_" + idx);
+  var inp = document.getElementById("fi_" + idx);
+  if (!span || !inp) return;
+  span.style.display = "none";
+  inp.style.display = "inline-block";
+  inp.focus();
 }
 
+function saveFamilyPhone(idx, name) {
+  var inp = document.getElementById("fi_" + idx);
+  var span = document.getElementById("fp_" + idx);
+  if (!inp || !span) return;
+  var phone = inp.value.trim();
+  inp.style.display = "none";
+  fetch("/api/update-family-phone", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:name,phone:phone})})
+  .then(function(r){return r.json()}).then(function(d){
+    if (d.updated) loadFamily();
+  }).catch(function(){ loadFamily(); });
+}
+
+// دالة التفعيل والإيقاف الحقيقية المرتبطة بـ السيرفر الخاص بك مباشرة
 function toggleAI(phone, cb) {
   if (!phone) { cb.checked = !cb.checked; return; }
   fetch("/toggle-ai/" + phone).then(function(r){return r.json()}).then(function(d){
