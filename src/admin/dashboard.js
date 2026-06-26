@@ -53,7 +53,7 @@ function createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, ai
         }).join('') + '</table>';
 
     // Server-rendered family contacts
-    let familyHtml = '<span style="color:#888">جاري التحميل...</span>';
+    let familyHtml = '<span style="color:#888;font-size:13px">لا يوجد أفراد عائلة بعد. أضف الأرقام بالضغط على ➕ أضف رقم.</span>';
     try {
       const raw = fs.readFileSync("./family-contacts.json", "utf8");
       const list = JSON.parse(raw);
@@ -74,8 +74,9 @@ function createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, ai
               : '<span style="color:#555;font-size:11px">بدون رقم</span>') + '</td></tr>';
         }).join('') + '</table>';
       }
-    } catch(e) {}
-    // If rendering failed, keep the default "جاري التحميل" text and JS will fill it
+    } catch(e) {
+      // File doesn't exist yet — show empty state (not error)
+    }
 
     res.send(`<!DOCTYPE html>
 <html dir="rtl">

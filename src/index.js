@@ -16,6 +16,30 @@ const ADMIN_JID = process.env.ADMIN_JID || "966595510125@s.whatsapp.net";
 const RENDER_URL = process.env.RENDER_URL || "https://whatsapp-bot-1cxj.onrender.com";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 
+// Create default family-contacts.json if missing
+(function seedFamilyContacts() {
+  try {
+    if (!fs.existsSync("./family-contacts.json")) {
+      const defaults = [
+        {"phone":"","name":"ام سعاد","relationship":"الزوجة","aiDisabled":false},
+        {"phone":"","name":"سعاد (سوسه)","relationship":"الابنة الكبرى","aiDisabled":false},
+        {"phone":"","name":"ايه (ايويه)","relationship":"الابنة الوسطى","aiDisabled":false},
+        {"phone":"","name":"نورا","relationship":"الابن الصغير","aiDisabled":false},
+        {"phone":"","name":"حوده","relationship":"الابن","aiDisabled":false},
+        {"phone":"","name":"ام السعيد","relationship":"الأخت الكبرى","aiDisabled":false},
+        {"phone":"","name":"ام ياسمين","relationship":"الأخت الوسطى","aiDisabled":false},
+        {"phone":"","name":"ام ملك","relationship":"الأخت الصغرى","aiDisabled":false},
+        {"phone":"","name":"بطه","relationship":"بنت الأخت","aiDisabled":false},
+        {"phone":"","name":"بوبس","relationship":"بنت الأخت","aiDisabled":false},
+        {"phone":"","name":"هيومه","relationship":"بنت الأخت","aiDisabled":false},
+        {"phone":"","name":"ابو عماد","relationship":"الأخ","aiDisabled":false}
+      ];
+      fs.writeFileSync("./family-contacts.json", JSON.stringify(defaults, null, 2));
+      console.log("Created default family-contacts.json");
+    }
+  } catch(e) { console.error("seedFamilyContacts error:", e.message); }
+})();
+
 const rateLimits = {};
 function rateLimit(maxReq, windowMs) {
   return (req, res, next) => {
