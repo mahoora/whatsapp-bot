@@ -78,7 +78,7 @@ async function callGeminiVision(systemPrompt, imageBase64, mimeType, text) {
   const parts = [{ text: systemPrompt + "\n\n" + text }];
   parts.push({ inlineData: { mimeType, data: imageBase64 } });
   try {
-    const res = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`, {
+    const res = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
