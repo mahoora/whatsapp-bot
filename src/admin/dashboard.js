@@ -74,6 +74,12 @@ td{padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
 .footer{text-align:center;margin-top:30px;padding-bottom:80px}
 .footer a{color:#8696a0;font-size:12px}
 .badge{display:inline-block;background:rgba(0,168,132,0.15);color:#00a884;padding:2px 10px;border-radius:20px;font-size:12px;margin:2px}
+.switch{position:relative;display:inline-block;width:42px;height:22px;vertical-align:middle}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#555;transition:0.3s;border-radius:22px}
+.slider:before{position:absolute;content:"";height:16px;width:16px;left:3px;bottom:3px;background:#fff;transition:0.3s;border-radius:50%}
+.switch input:checked+.slider{background:#4caf50}
+.switch input:checked+.slider:before{transform:translateX(20px)}
 .stats{display:flex;gap:8px;flex-wrap:wrap}
 .stat-box{flex:1;min-width:80px;background:rgba(255,255,255,0.03);border-radius:8px;padding:10px;text-align:center}
 .stat-box .num{font-size:20px;font-weight:bold;color:#00a884}
@@ -123,6 +129,11 @@ ${!connected ? `<div class="card" style="text-align:center" id="qrCard">
 <div class="card" id="contactsCard">
   <h2>📋 جهات الاتصال</h2>
   <div id="contactsList" style="font-size:13px">جاري التحميل...</div>
+</div>
+
+<div class="card" id="familyCard">
+  <h2>👨‍👩‍👧‍👦 العائلة - التحكم بالزكاء</h2>
+  <div id="familyList" style="font-size:13px">جاري التحميل...</div>
 </div>
 
 <div class="card" id="notifCard">
@@ -283,6 +294,8 @@ function toggleDesktopNotif() {
   showToast(desktopNotifOn ? "إشعارات سطح المكتب مفعلة" : "إشعارات سطح المكتب متوقفة");
 }
 
+loadFamily();
+
 // Check vibration support
 try { if (!navigator.vibrate) document.getElementById("vibeStatus").textContent = "📳 غير متاح"; } catch(e) {}
 
@@ -319,6 +332,29 @@ evtSource.addEventListener("connected", function(e) {
 });
 // Poll QR every 3s if disconnected
 setInterval(updateQR, 3000);
+
+function loadFamily() {
+  var el = document.getElementById("familyList");
+  if (!el) return;
+  el.innerHTML = "جاري التحميل...";
+  fetch("/api/family-contacts").then(function(r){return r.json()}).then(function(list){
+    el.innerHTML = list.length === 0 ? '<span style="color:#888">لا يوجد</span>'
+      : '<table>' + list.map(function(c){
+          var phone = c.phone.replace(/[^0-9]/g,"");
+          var checked = !c.aiDisabled;
+          return '<tr><td style="padding:4px 0">' + c.name.replace(/[<>&"]/g,'') + '</td>' +
+            '<td style="padding:4px;direction:ltr;text-align:right;font-size:12px">' + (c.phone || '-') + '</td>' +
+            '<td style="padding:4px"><label class="switch"><input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleAI(\'' + phone + '\',this)"><span class="slider"></span></label></td></tr>';
+        }).join('') + '</table>';
+  }).catch(function(){ if(el) el.innerHTML='<span style="color:#888">خطأ في التحميل</span>'; });
+}
+
+function toggleAI(phone, cb) {
+  if (!phone) return;
+  fetch("/toggle-ai/" + phone).then(function(r){return r.json()}).then(function(d){
+    cb.checked = !d.disabled;
+  }).catch(function(){ cb.checked = !cb.checked; });
+}
 
 function toggleContact(phone) {
   var btn = event && event.target;

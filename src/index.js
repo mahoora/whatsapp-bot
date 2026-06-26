@@ -117,8 +117,39 @@ app.patch("/orders/:id/status", (req, res) => {
   res.json(order);
 });
 
+const { FAMILY } = require("./config/family");
+
+function loadFamilyContacts() {
+  try { return JSON.parse(fs.readFileSync("./family-contacts.json")); }
+  catch (e) { return FAMILY.map(f => ({ phone: f.phone, name: f.name, relationship: f.relationship })); }
+}
+
 app.get("/api/contacts", (req, res) => {
   res.json(contactsDb.getContacts());
+});
+
+app.get("/api/family-contacts", (req, res) => {
+  const list = loadFamilyContacts();
+  res.json(list.map(c => ({
+    ...c,
+    aiDisabled: aiDisabledPhones.some(p => {
+      const clean = c.phone.replace(/[^0-9]/g, "");
+      return p.includes(clean) || clean.includes(p);
+    })
+  })));
+});
+
+app.get("/toggle-ai/:phone", (req, res) => {
+  let phone = req.params.phone.replace(/[^0-9]/g, "");
+  if (!phone) return res.status(400).json({ error: "Invalid phone" });
+  const idx = aiDisabledPhones.findIndex(p => p.includes(phone) || phone.includes(p));
+  if (idx >= 0) {
+    aiDisabledPhones.splice(idx, 1);
+  } else {
+    aiDisabledPhones.push(phone);
+  }
+  fs.writeFileSync("./ai-disabled.json", JSON.stringify(aiDisabledPhones));
+  res.json({ phone, disabled: idx < 0 });
 });
 
 app.post("/api/toggle-status", (req, res) => {
