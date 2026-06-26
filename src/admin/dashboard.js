@@ -20,7 +20,6 @@ function createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, ai
     res.redirect("/admin" + (authToken ? "?token=" + authToken : ""));
   });
 
-  // API لجلب قائمة العائلة وتحديث حالة الـ AI لكل شخص بشكل حي
   router.get("/api/family-contacts", (req, res) => {
     try {
       if (fs.existsSync("./family-contacts.json")) {
@@ -37,7 +36,6 @@ function createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, ai
     res.json([]);
   });
 
-  // API لتحديث وحفظ رقم الهاتف للشخص يدوياً
   router.post("/api/update-family-phone", express.json(), (req, res) => {
     try {
       const { name, phone } = req.body;
@@ -54,17 +52,16 @@ function createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, ai
     res.json({ updated: false });
   });
 
-  // الـ Endpoint لتشغيل وإيقاف الـ AI وحفظه في السيرفر
   router.get("/admin/toggle-ai/:num", (req, res) => {
     let num = (req.params.num || "").replace(/[^0-9]/g, "");
     let isNowDisabled = false;
     if (num.length >= 5) {
       const idx = aiDisabledPhones.indexOf(num);
       if (idx >= 0) {
-        aiDisabledPhones.splice(idx, 1); // تشغيل
+        aiDisabledPhones.splice(idx, 1);
         isNowDisabled = false;
       } else {
-        aiDisabledPhones.push(num); // إيقاف
+        aiDisabledPhones.push(num);
         isNowDisabled = true;
       }
       fs.writeFileSync("./ai-disabled.json", JSON.stringify(aiDisabledPhones, null, 2));
@@ -78,13 +75,17 @@ function createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, ai
     const connected = isConnected();
 
     let convRows = "";
-    const { conversationHistory } = require("../message-handler");
-    for (const [jid] of conversationHistory) {
-      const phone = jid.split("@")[0].replace(/[^0-9]/g, "");
-      const isOff = aiDisabledPhones.some(p => phone.includes(p) || jid.includes(p));
-      convRows += `<tr><td style="padding:6px 0">${phone}</td>
-        <td><a href="/admin/disable/${encodeURIComponent(phone)}${authToken ? "?token=" + authToken : ""}" class="btn btn-red" style="padding:4px 10px;font-size:12px">${isOff ? "🔇" : "🔊"}</a></td></tr>`;
-    }
+    try {
+      const { conversationHistory } = require("../message-handler");
+      if (conversationHistory) {
+        for (const [jid] of conversationHistory) {
+          const phone = jid.split("@")[0].replace(/[^0-9]/g, "");
+          const isOff = aiDisabledPhones.some(p => phone.includes(p) || jid.includes(p));
+          convRows += `<tr><td style="padding:6px 0">${phone}</td>
+            <td><a href="/admin/disable/${encodeURIComponent(phone)}${authToken ? "?token=" + authToken : ""}" class="btn btn-red" style="padding:4px 10px;font-size:12px">${isOff ? "🔇" : "🔊"}</a></td></tr>`;
+        }
+      }
+    } catch(e) {}
 
     res.send(`<!DOCTYPE html>
 <html dir="rtl">
@@ -105,7 +106,6 @@ h1{text-align:center;color:#00a884;font-size:22px;margin-bottom:20px}
 .btn{display:inline-block;padding:10px 20px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:bold;border:none;cursor:pointer;}
 .btn-red{background:#e94560;color:#fff}
 input{padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(42,57,66,0.6);color:#e9edef;font-size:14px;width:100%;outline:none;}
-form{display:flex;gap:8px;margin:8px 0}
 table{width:100%;font-size:13px;border-collapse:collapse}
 td{padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
 .fab{position:fixed;bottom:16px;left:0;right:0;display:flex;justify-content:center;z-index:99;padding:0 16px;}
@@ -113,17 +113,14 @@ td{padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
 .fab-left{border-radius:30px 0 0 30px;background:#4caf50}
 .fab-right{border-radius:0 30px 30px 0;background:#e94560}
 .fab-inactive{background:#555;opacity:0.5}
-.qr-img{display:block;margin:12px auto;border-radius:12px;max-width:250px}
+.qr-container{text-align:center;margin:15px 0}
+.qr-img{display:block;margin:12px auto;border-radius:12px;max-width:220px;background:#fff;padding:10px}
 .toast{position:fixed;top:20px;right:20px;z-index:999;background:rgba(0,168,132,0.9);color:#fff;padding:12px 20px;border-radius:12px;display:none}
-
-/* تصميم الشبكة يمين ويسار */
 .family-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
 @media(max-width:480px){.family-grid{grid-template-columns:1fr}}
 .family-card{background:rgba(255,255,255,0.03);padding:10px;border-radius:10px;display:flex;justify-content:space-between;align-items:center;border:1px solid rgba(255,255,255,0.05)}
-.family-info{display:flex;flex-direction:column;gap:4px;text-align:right;width:65%;}
-
-/* زر الـ Toggle الحقيقي */
-.switch{position:relative;display:inline-block;width:40px;height:22px;}
+.family-info{display:flex;flex-direction:column;gap:4px;text-align:right;width:65%}
+.switch{position:relative;display:inline-block;width:40px;height:22px}
 .switch input{opacity:0;width:0;height:0}
 .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#e94560;transition:0.3s;border-radius:22px}
 .slider:before{position:absolute;content:"";height:14px;width:14px;left:4px;bottom:4px;background:#fff;transition:0.3s;border-radius:50%}
@@ -140,6 +137,13 @@ td{padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
   ${connected ? "✅ متصل بالواتساب" : "❌ غير متصل"} | ${mode} ${modeText}
 </div>
 
+${!connected ? `
+<div class="card qr-container">
+  <h2>📷 امسح باركود الواتساب للربط</h2>
+  <img src="/admin/qr.png${authToken ? "?token=" + authToken : ""}" class="qr-img" alt="QR Code">
+  <p style="font-size:12px;color:#8696a0;margin-top:8px">يرجى فتح الواتساب في جوالك واختيار الأجهزة المرتبطة ثم مسح الكود</p>
+</div>` : ''}
+
 <div class="card" id="familyCard">
   <h2>👨‍👩‍👧‍👦 العائلة - التحكم بالذكاء (يمين وشمال)</h2>
   <div id="familyList" style="font-size:13px">جاري التحميل...</div>
@@ -147,7 +151,7 @@ td{padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
 
 <div class="card" id="conversationsCard">
   <h2>💬 المحادثات النشطة</h2>
-  <div id="convList"><table>${convRows || '<tr><td style="color:#888;text-align:center">لا يوجد محادثات حالياً</td></tr>'}</table></div>
+  <div id="convList"><table>${convRows || '<tr><td style="color:#888;text-align:center;padding:10px 0">لا يوجد محادثات حالياً</td></tr>'}</table></div>
 </div>
 
 <div class="fab">
@@ -177,7 +181,7 @@ function beep() {
         var tones = [
           {f:660, t:0.05, d:0.12},
           {f:880, t:0.19, d:0.12},
-          {f:1100, t:0.33, d:0.18},
+          {f:1100, t:0.33, d:0.18}
         ];
         for (var i = 0; i < tones.length; i++) {
           var t = tones[i];
@@ -193,7 +197,6 @@ function beep() {
       }
     }
   } catch(e) {}
-
   try {
     var s = new Audio("/notification.wav");
     s.volume = 0.3; 
