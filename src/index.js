@@ -11,7 +11,7 @@ const contactsDb = require("./contacts-db");
 
 const PORT = process.env.PORT || 3000;
 const ADMIN_JID = process.env.ADMIN_JID || "966595510125@s.whatsapp.net";
-const RENDER_URL = process.env.RENDER_URL || "https://maher-fire-safety-bot.onrender.com";
+const RENDER_URL = process.env.RENDER_URL || "https://whatsapp-bot-1cxj.onrender.com";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 
 const rateLimits = {};

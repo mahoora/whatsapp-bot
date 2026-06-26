@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: maher-fire-safety-bot
+    name: whatsapp-bot
     env: node
     buildCommand: npm install
     startCommand: npm start
@@ -15,6 +15,6 @@ services:
       - key: PORT
         value: 3000
       - key: RENDER_URL
-        value: https://maher-fire-safety-bot.onrender.com
+        value: https://whatsapp-bot-1cxj.onrender.com
       - key: ADMIN_PASSWORD
         sync: false
