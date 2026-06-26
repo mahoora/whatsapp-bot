@@ -52,31 +52,47 @@ function createDashboard(getSock, isConnected, getLatestQr, aiDisabledPhones, ai
             '<td style="padding:4px 0"><button onclick="toggleContact(\'' + safePhone + '\')" style="background:none;border:none;cursor:pointer;font-size:18px;color:' + (isActive ? '#4caf50' : '#e94560') + '" title="' + (isActive ? 'اضغط للإيقاف' : 'اضغط للتفعيل') + '">' + (isActive ? '✅' : '🔇') + '</button></td></tr>';
         }).join('') + '</table>';
 
-    // Server-rendered family contacts
-    let familyHtml = '<span style="color:#888;font-size:13px">لا يوجد أفراد عائلة بعد. أضف الأرقام بالضغط على ➕ أضف رقم.</span>';
-    try {
-      const raw = fs.readFileSync("./family-contacts.json", "utf8");
-      const list = JSON.parse(raw);
-      if (Array.isArray(list) && list.length > 0) {
-        familyHtml = '<table>' + list.map(function(c, i){
+// Build family members dropdown options for the form
+let familyDropdownOptions = "";
+try {
+  const raw = fs.readFileSync("./family-contacts.json", "utf8");
+  const list = JSON.parse(raw);
+  if (Array.isArray(list)) {
+    familyDropdownOptions = list.map(function(c) {
+      var n = (c.name||"").replace(/[<>&"]/g,'');
+      return '<option value="' + n + '">' + n + '</option>';
+    }).join('');
+  }
+} catch(e) {}
+
+// Server-rendered family contacts
+let familyHtml = '<span style="color:#888;font-size:13px">لا يوجد أفراد عائلة بعد.</span>';
+try {
+  const raw = fs.readFileSync("./family-contacts.json", "utf8");
+  const list = JSON.parse(raw);
+  if (Array.isArray(list) && list.length > 0) {
+    familyHtml = '<form id="familyForm" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">' +
+      '<select id="famName" style="flex:2;min-width:100px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:rgba(42,57,66,0.8);color:#e9edef;font-size:13px;outline:none">' + familyDropdownOptions + '</select>' +
+      '<input id="famPhone" style="flex:3;min-width:120px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:rgba(42,57,66,0.8);color:#e9edef;font-size:13px;outline:none;direction:ltr" placeholder="9665xxxxxxxx">' +
+      '<button type="button" onclick="savePhoneFromForm()" style="padding:8px 16px;background:#00a884;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px">💾 حفظ</button>' +
+      '</form>' +
+      '<div style="font-size:11px;color:#8696a0;margin-bottom:8px">⬆ اختر الاسم، اكتب الرقم، اضغط حفظ</div>' +
+      '<table>' + list.map(function(c, i){
           var phone = (c.phone||"").replace(/[^0-9]/g,"");
           var hasPhone = phone.length > 0;
           var checked = !c.aiDisabled;
           var safeName = (c.name||"").replace(/[<>&"]/g,'');
           var safePhone = (c.phone||"").replace(/[<>&"]/g,'');
-          return '<tr><td style="padding:4px 0">' + safeName + '</td>' +
-            '<td style="padding:4px;direction:ltr;text-align:right;font-size:12px">' +
-            '<span id="fp_' + i + '" ' + (hasPhone ? '' : 'onclick="editFamilyPhone(' + i + ',\'' + safeName + '\')" style="cursor:pointer;color:#888" title="اضغط لإضافة رقم"') + '>' + (safePhone || '➕ أضف رقم') + '</span>' +
-            '<input id="fi_' + i + '" style="display:none;width:120px;padding:4px;border-radius:6px;border:1px solid #4caf50;background:#1a2a33;color:#e9edef;font-size:12px;direction:ltr" placeholder="مثال: 9665xxxxxxxx" onkeydown="if(event.key==\'Enter\')saveFamilyPhone(' + i + ',\'' + safeName + '\')" onblur="saveFamilyPhone(' + i + ',\'' + safeName + '\')">' +
-            '</td>' +
-            '<td style="padding:4px">' + (hasPhone
+          return '<tr><td style="padding:6px 0;width:40%">' + safeName + '</td>' +
+            '<td style="padding:6px 0;direction:ltr;text-align:right;font-size:12px;color:' + (hasPhone ? '#e9edef' : '#888') + ';width:35%">' + (safePhone || '—') + '</td>' +
+            '<td style="padding:6px 0;text-align:center;width:25%">' + (hasPhone
               ? '<label class="switch"><input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleAI(\'' + phone + '\',this)"><span class="slider"></span></label>'
-              : '<span style="color:#555;font-size:11px">بدون رقم</span>') + '</td></tr>';
+              : '<span style="color:#555;font-size:11px">⚠️ بلا رقم</span>') + '</td></tr>';
         }).join('') + '</table>';
-      }
-    } catch(e) {
-      // File doesn't exist yet — show empty state (not error)
-    }
+  }
+} catch(e) {
+  // File doesn't exist yet — show empty state
+}
 
     res.send(`<!DOCTYPE html>
 <html dir="rtl">
@@ -232,20 +248,46 @@ if (typeof Notification !== "undefined" && Notification.permission === "default"
 
 // Sound system
 var audioCtx = null;
-var useBeepFallback = true; // Use Audio element by default since it works without user gesture
+// useBeepFallback removed; oscillator is primary method
 document.addEventListener("click", function(){
   if (!audioCtx) {
     try { audioCtx = new (window.AudioContext||window.webkitAudioContext)(); } catch(e) {}
   }
   if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
-  useBeepFallback = false; // AudioContext is now ready
 }, { once: true });
 
 function beep() {
   if (!soundOn) return;
   try {
-    if (!useBeepFallback && audioCtx && audioCtx.state !== "closed") {
-      // AudioContext ready - use oscillator
+    var ctx = audioCtx;
+    if (ctx && ctx.state !== "closed") {
+      if (ctx.state === "suspended") ctx.resume();
+      if (ctx.state === "running") {
+        var now = ctx.currentTime;
+        var tones = [
+          {f:660, t:0.05, d:0.12},
+          {f:880, t:0.19, d:0.12},
+          {f:1100, t:0.33, d:0.18},
+        ];
+        for (var i = 0; i < tones.length; i++) {
+          var t = tones[i];
+          var o = ctx.createOscillator();
+          var g = ctx.createGain();
+          o.connect(g); g.connect(ctx.destination);
+          o.frequency.value = t.f; o.type = "sine";
+          g.gain.setValueAtTime(0.3, now + t.t);
+          g.gain.exponentialRampToValueAtTime(0.01, now + t.t + t.d);
+          o.start(now + t.t); o.stop(now + t.t + t.d);
+        }
+        return;
+      }
+    }
+  } catch(e) {}
+  try {
+    var s = new Audio("/notification.wav");
+    s.volume = 0.3; s.play().catch(function(){});
+  } catch(e) {}
+}
       if (audioCtx.state === "suspended") audioCtx.resume();
       if (audioCtx.state === "running") {
         var ctx = audioCtx;
@@ -384,66 +426,59 @@ try {
   });
 } catch(e) { console.error("Socket.IO error:", e); }
 
-// Notification sound function - uses beep() on mobile, WAV on desktop
 function playNotifSound() {
   if (!soundOn) return;
-  try {
-    var snd = new Audio("/notification.wav");
-    snd.volume = 0.3;
-    snd.play().catch(function(){ beep(); });
-  } catch(e) { beep(); }
+  beep();
 }
 
 function loadFamily() {
   var el = document.getElementById("familyList");
   if (!el) { setTimeout(loadFamily, 500); return; }
-  el.innerHTML = "جاري التحميل...";
-  fetch("/api/family-contacts").then(function(r){
-    console.log("family-contacts status:", r.status);
-    return r.json();
-  }).then(function(list){
-    console.log("family-contacts data:", list);
-    el.innerHTML = list.length === 0 ? '<span style="color:#888">لا يوجد أفراد عائلة</span>'
-      : '<table>' + list.map(function(c, i){
+  fetch("/api/family-contacts").then(function(r){return r.json()}).then(function(list){
+    if (!el) return;
+    if (list.length === 0) {
+      el.innerHTML = '<span style="color:#888;font-size:13px">لا يوجد أفراد عائلة بعد.</span>';
+      return;
+    }
+    var opts = list.map(function(c){ return '<option value="' + (c.name||"").replace(/[<>&"]/g,'') + '">' + (c.name||"").replace(/[<>&"]/g,'') + '</option>'; }).join('');
+    el.innerHTML = '<form id="familyForm" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">' +
+      '<select id="famName" style="flex:2;min-width:100px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:rgba(42,57,66,0.8);color:#e9edef;font-size:13px;outline:none">' + opts + '</select>' +
+      '<input id="famPhone" style="flex:3;min-width:120px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:rgba(42,57,66,0.8);color:#e9edef;font-size:13px;outline:none;direction:ltr" placeholder="9665xxxxxxxx">' +
+      '<button type="button" onclick="savePhoneFromForm()" style="padding:8px 16px;background:#00a884;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px">💾 حفظ</button>' +
+      '</form>' +
+      '<div style="font-size:11px;color:#8696a0;margin-bottom:8px">⬆ اختر الاسم، اكتب الرقم، اضغط حفظ</div>' +
+      '<table>' + list.map(function(c){
           var phone = (c.phone||"").replace(/[^0-9]/g,"");
           var hasPhone = phone.length > 0;
           var checked = !c.aiDisabled;
           var safeName = (c.name||"").replace(/[<>&"]/g,'');
           var safePhone = (c.phone||"").replace(/[<>&"]/g,'');
-          return '<tr><td style="padding:4px 0">' + safeName + '</td>' +
-            '<td style="padding:4px;direction:ltr;text-align:right;font-size:12px">' +
-            '<span id="fp_' + i + '" ' + (hasPhone ? '' : 'onclick="editFamilyPhone(' + i + ',\'' + safeName + '\')" style="cursor:pointer;color:#888" title="اضغط لإضافة رقم"') + '>' + (safePhone || '➕ أضف رقم') + '</span>' +
-            '<input id="fi_' + i + '" style="display:none;width:120px;padding:4px;border-radius:6px;border:1px solid #4caf50;background:#1a2a33;color:#e9edef;font-size:12px;direction:ltr" placeholder="مثال: 9665xxxxxxxx" onkeydown="if(event.key==\'Enter\')saveFamilyPhone(' + i + ',\'' + safeName + '\')" onblur="saveFamilyPhone(' + i + ',\'' + safeName + '\')">' +
-            '</td>' +
-            '<td style="padding:4px">' + (hasPhone
+          return '<tr><td style="padding:6px 0;width:40%">' + safeName + '</td>' +
+            '<td style="padding:6px 0;direction:ltr;text-align:right;font-size:12px;color:' + (hasPhone ? '#e9edef' : '#888') + ';width:35%">' + (safePhone || '—') + '</td>' +
+            '<td style="padding:6px 0;text-align:center;width:25%">' + (hasPhone
               ? '<label class="switch"><input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleAI(\'' + phone + '\',this)"><span class="slider"></span></label>'
-              : '<span style="color:#555;font-size:11px">بدون رقم</span>') + '</td></tr>';
+              : '<span style="color:#555;font-size:11px">⚠️ بلا رقم</span>') + '</td></tr>';
         }).join('') + '</table>';
   }).catch(function(e){
     console.error("family-contacts error:", e);
-    if(el) el.innerHTML='<span style="color:#e94560">خطأ: ' + (e.message||e) + '</span>';
+    if (el) el.innerHTML='<span style="color:#e94560">خطأ: ' + (e.message||e) + '</span>';
   });
 }
 
-function editFamilyPhone(idx, name) {
-  var span = document.getElementById("fp_" + idx);
-  var inp = document.getElementById("fi_" + idx);
-  if (!span || !inp) return;
-  span.style.display = "none";
-  inp.style.display = "inline-block";
-  inp.focus();
-}
-
-function saveFamilyPhone(idx, name) {
-  var inp = document.getElementById("fi_" + idx);
-  var span = document.getElementById("fp_" + idx);
-  if (!inp || !span) return;
-  var phone = inp.value.trim();
-  inp.style.display = "none";
+function savePhoneFromForm() {
+  var nameEl = document.getElementById("famName");
+  var phoneEl = document.getElementById("famPhone");
+  if (!nameEl || !phoneEl) return;
+  var name = nameEl.value;
+  var phone = phoneEl.value.trim();
+  if (!phone) { showToast("اكتب رقم الموبايل أولاً"); return; }
   fetch("/api/update-family-phone", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:name,phone:phone})})
   .then(function(r){return r.json()}).then(function(d){
-    if (d.updated) loadFamily();
-  }).catch(function(){ loadFamily(); });
+    if (d.updated) {
+      showToast("✅ تم حفظ رقم " + name);
+      loadFamily();
+    }
+  }).catch(function(){ showToast("❌ فشل الحفظ"); loadFamily(); });
 }
 
 function toggleAI(phone, cb) {
