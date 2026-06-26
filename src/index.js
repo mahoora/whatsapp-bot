@@ -102,6 +102,17 @@ app.get("/toggle-ai/:phone", (req, res) => {
   }
 });
 
+app.post("/api/update-family-phone", (req, res) => {
+  const { name, phone } = req.body;
+  if (!name) return res.status(400).json({ error: "Missing name" });
+  const list = loadFamilyContacts();
+  const idx = list.findIndex(f => f.name === name);
+  if (idx < 0) return res.status(404).json({ error: "Not found" });
+  list[idx].phone = phone || "";
+  try { fs.writeFileSync("./family-contacts.json", JSON.stringify(list, null, 2)); } catch(e) {}
+  res.json({ name, phone, updated: true });
+});
+
 app.post("/api/toggle-status", (req, res) => {
   const { phone } = req.body;
   if (!phone) return res.status(400).json({ error: "Missing phone" });
