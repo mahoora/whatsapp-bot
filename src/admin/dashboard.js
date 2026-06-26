@@ -160,21 +160,41 @@ if (typeof Notification !== "undefined" && Notification.permission === "default"
   Notification.requestPermission();
 }
 
-// Shared AudioContext (resume on first user click)
+// Load contacts immediately
+(function loadContacts() {
+  var el = document.getElementById("contactsList");
+  if (!el) { setTimeout(loadContacts, 500); return; }
+  fetch("/api/contacts").then(function(r){return r.json()}).then(function(list){
+    el.innerHTML = list.length === 0
+      ? '<span style="color:#888;font-size:13px">لا توجد جهات اتصال بعد. سيتم إضافة المرسلين تلقائياً.</span>'
+      : '<table>' + list.map(function(c) {
+          var isActive = c.status === "active";
+          return '<tr><td style="padding:4px 0">' + (c.name||'').replace(/[<>&"]/g,'') + '</td>' +
+            '<td style="padding:4px 0;direction:ltr;text-align:right">' + c.phone + '</td>' +
+            '<td style="padding:4px 0"><button onclick="toggleContact(\'' + c.phone + '\')" style="background:none;border:none;cursor:pointer;font-size:18px;color:' + (isActive ? '#4caf50' : '#e94560') + '" title="' + (isActive ? 'اضغط للإيقاف' : 'اضغط للتفعيل') + '">' + (isActive ? '✅' : '🔇') + '</button></td></tr>';
+        }).join('') + '</table>';
+  }).catch(function(){
+    if (el) el.innerHTML='<span style="color:#888">فارغ</span>';
+  });
+})();
+
+// Sound system
 let audioCtx = null;
-function getAudioCtx() {
-  if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-  if (audioCtx.state === "suspended") audioCtx.resume();
-  return audioCtx;
+function initAudio() {
+  try {
+    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+  } catch(e) {}
 }
-document.addEventListener("click", getAudioCtx, { once: true });
+document.addEventListener("click", initAudio, { once: true });
 
 function beep() {
   if (!soundOn) return;
   try {
-    const ctx = getAudioCtx();
+    if (!audioCtx || audioCtx.state === "closed") initAudio();
+    if (!audioCtx || audioCtx.state !== "running") return;
+    const ctx = audioCtx;
     const now = ctx.currentTime;
-    // Three-tone ascending notification chime
     const tones = [
       {f:660, t:0, d:0.12},
       {f:880, t:0.14, d:0.12},
@@ -285,28 +305,6 @@ evtSource.addEventListener("connected", function(e) {
 });
 // Poll QR every 3s if disconnected
 setInterval(updateQR, 3000);
-
-// Load contacts with inline toggles
-function renderContacts(list) {
-  var html = list.length === 0
-    ? '<span style="color:#888;font-size:13px">لا توجد جهات اتصال بعد. سيتم إضافة المرسلين تلقائياً.</span>'
-    : '<table>' + list.map(function(c) {
-        var isActive = c.status === "active";
-        return '<tr><td style="padding:4px 0">' + escapeHtml(c.name) + '</td>' +
-          '<td style="padding:4px 0;direction:ltr;text-align:right">' + c.phone + '</td>' +
-          '<td style="padding:4px 0"><button onclick="toggleContact(\'' + c.phone + '\')" style="background:none;border:none;cursor:pointer;font-size:18px;color:' + (isActive ? '#4caf50' : '#e94560') + '" title="' + (isActive ? 'اضغط للإيقاف' : 'اضغط للتفعيل') + '">' + (isActive ? '✅' : '🔇') + '</button></td></tr>';
-      }).join('') + '</table>';
-  document.getElementById("contactsList").innerHTML = html;
-}
-
-function escapeHtml(s) {
-  if (!s) return "";
-  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-}
-
-fetch("/api/contacts").then(function(r){return r.json()}).then(renderContacts).catch(function(){
-  document.getElementById("contactsList").innerHTML='<span style="color:#888">فارغ</span>';
-});
 
 function toggleContact(phone) {
   var btn = event && event.target;
