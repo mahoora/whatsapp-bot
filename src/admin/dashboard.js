@@ -352,31 +352,47 @@ function updateQR() {
   }).catch(function(){});
 }
 
-// SSE connection (fallback)
+// SSE connection (fallback for Socket.IO)
 var evtSource = new EventSource("/events");
 evtSource.addEventListener("connected", function(e) {
   updateQR();
 });
+evtSource.addEventListener("new_message", function(e) {
+  playNotifSound();
+  vibrate();
+  var data = JSON.parse(e.data || "{}");
+  var phone = data.from ? data.from.split("@")[0].replace(/[^0-9]/g, "") : "";
+  var name = data.name || phone || "Unknown";
+  showDesktopNotif("📩 رسالة جديدة من " + name, phone + (data.text ? ": " + data.text.substring(0, 60) : ""));
+  showToast("رسالة من " + name);
+  flashCard("conversationsCard");
+});
 // Poll QR every 3s if disconnected
 setInterval(updateQR, 3000);
 
-// Socket.IO connection
-var socket = io();
-socket.on("new_message", function(data) {
-  console.log("Socket.IO new_message:", data);
-  // Play notification.wav
+// Socket.IO connection (wrapped for safety)
+try {
+  var socket = io();
+  socket.on("new_message", function(data) {
+    playNotifSound();
+    vibrate();
+    var phone = (data && data.from) ? data.from.split("@")[0].replace(/[^0-9]/g, "") : "";
+    var name = (data && data.name) || phone || "Unknown";
+    showDesktopNotif("📩 رسالة جديدة من " + name, phone + (data && data.text ? ": " + data.text.substring(0, 60) : ""));
+    showToast("رسالة من " + name);
+    flashCard("conversationsCard");
+  });
+} catch(e) { console.error("Socket.IO error:", e); }
+
+// Notification sound function - uses beep() on mobile, WAV on desktop
+function playNotifSound() {
+  if (!soundOn) return;
   try {
     var snd = new Audio("/notification.wav");
     snd.volume = 0.3;
     snd.play().catch(function(){ beep(); });
   } catch(e) { beep(); }
-  vibrate();
-  var phone = (data && data.from) ? data.from.split("@")[0].replace(/[^0-9]/g, "") : "";
-  var name = (data && data.name) || phone || "Unknown";
-  showDesktopNotif("📩 رسالة جديدة من " + name, phone + (data && data.text ? ": " + data.text.substring(0, 60) : ""));
-  showToast("رسالة من " + name);
-  flashCard("conversationsCard");
-});
+}
 
 function loadFamily() {
   var el = document.getElementById("familyList");
