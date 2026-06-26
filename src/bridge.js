@@ -17,43 +17,22 @@ const AUTH_DIR = process.env.AUTH_DIR || "./auth_info";
 
 let logger = pino({ level: "warn" });
 
-function saveCredsToEnv() {
-  const p = path.join(AUTH_DIR, "creds.json");
-  if (!fs.existsSync(p)) return;
-  try {
-    const https = require("https");
-    const apiKey = process.env.RENDER_API_KEY;
-    const sid = process.env.RENDER_SERVICE_ID;
-    const value = fs.readFileSync(p).toString("base64");
-    if (!apiKey || !sid) return;
-    const body = JSON.stringify({ value });
-    const opts = {
-      hostname: "api.render.com",
-      path: "/v1/services/" + sid + "/env-vars/CREDS_JSON",
-      method: "PUT",
-      timeout: 10000,
-      headers: { Authorization: "Bearer " + apiKey, "Content-Type": "application/json" },
-    };
-    const req = https.request(opts, res => { res.resume(); });
-    req.on("error", () => {});
-    req.write(body);
-    req.end();
-  } catch (e) {}
-}
-
-function loadCreds() {
-  const v = process.env.CREDS_JSON;
-  if (!v) return;
-  try {
-    if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
-    fs.writeFileSync(path.join(AUTH_DIR, "creds.json"), Buffer.from(v, "base64"));
-    console.log("Loaded creds from env");
-  } catch (e) {
-    console.error("Failed to load creds:", e.message);
+// Delete corrupted creds from env (was causing 405 errors)
+// Auth will be created fresh by Baileys on first connection
+const oldCredsPath = path.join(AUTH_DIR, "creds.json");
+try {
+  if (fs.existsSync(oldCredsPath)) {
+    const content = fs.readFileSync(oldCredsPath, "utf8");
+    // If creds file starts with '{' it's a valid JSON, keep it
+    JSON.parse(content);
   }
+} catch(e) {
+  // Corrupted creds - delete them
+  try {
+    fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+    console.log("Deleted corrupted auth directory");
+  } catch(e2) {}
 }
-
-loadCreds();
 
 let sock = null;
 let wsConnected = false;
